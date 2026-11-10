@@ -33,7 +33,7 @@ using ores::synthetic::feed::sql_literal;
 using ores::synthetic::feed::where_clause;
 
 const std::string folder = "0b7f6f0e-8c5e-4c3b-9d3e-6a0f5a1c2d3e";
-const std::string other = "1c8a7a1f-9d6f-4d4c-8e4f-7b1a6b2d3e4f";
+const std::string excluded_feed_id = "1c8a7a1f-9d6f-4d4c-8e4f-7b1a6b2d3e4f";
 
 }
 
@@ -127,10 +127,10 @@ TEST_CASE("feed_filter searches each word and escapes the pattern", "[feed_filte
 
 TEST_CASE("feed_filter leaves out the excluded feeds", "[feed_filter]") {
     feed_filter f;
-    f.excluded_ids = {folder, other};
-    CHECK_THAT(
-        where_clause(f, {}, true),
-        ContainsSubstring("id::uuid not in (E'" + folder + "'::uuid, E'" + other + "'::uuid)"));
+    f.excluded_ids = {folder, excluded_feed_id};
+    CHECK_THAT(where_clause(f, {}, true),
+               ContainsSubstring("id::uuid not in (E'" + folder + "'::uuid, E'" + excluded_feed_id +
+                                 "'::uuid)"));
 }
 
 TEST_CASE("feed_filter names only the picked feeds and ignores the filter", "[feed_filter]") {
@@ -138,7 +138,7 @@ TEST_CASE("feed_filter names only the picked feeds and ignores the filter", "[fe
     f.feed_ids = {folder};
     f.provider_code = "bloomberg";
     f.state = "started";
-    f.excluded_ids = {other};
+    f.excluded_ids = {excluded_feed_id};
     CHECK(where_clause(f, {"synthetic.a"}, true) == "id::uuid in (E'" + folder + "'::uuid)");
 }
 

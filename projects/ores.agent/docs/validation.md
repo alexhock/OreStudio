@@ -73,7 +73,8 @@ source/model identifiers; complete private reports remain outside Git.
 
 Detailed Markdown reports and earlier release checks are retained in the
 [frozen documentation snapshot](https://github.com/alexhock/OreStudio/tree/f2dd9f89c88c45f270cf42cea43e99cc09cf5bc1/projects/ores.agent/docs).
-The current tree keeps only the five guides and README.
+The current guides and [query task list](query-tasks.md) replace those historical
+planning documents. Tasks do not change the delivered capabilities listed here.
 
 Reference records:
 

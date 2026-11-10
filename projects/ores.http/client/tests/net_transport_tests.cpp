@@ -18,6 +18,7 @@
  *
  */
 #include "ores.http.client/net/transport.hpp"
+#include "ores.platform/process/pid.hpp"
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -42,7 +43,6 @@
 #include <optional>
 #include <string>
 #include <thread>
-#include <unistd.h>
 
 namespace {
 
@@ -99,9 +99,10 @@ certificate make_certificate(const std::string& host) {
 
 std::filesystem::path written(const std::string& pem) {
     static int n = 0;
-    const auto path = std::filesystem::temp_directory_path() /
-                      ("ores_http_client_test_" + std::to_string(::getpid()) + "_" +
-                       std::to_string(n++) + ".pem");
+    const auto path =
+        std::filesystem::temp_directory_path() /
+        ("ores_http_client_test_" + std::to_string(ores::platform::process::current_pid()) + "_" +
+         std::to_string(n++) + ".pem");
     std::ofstream(path) << pem;
     return path;
 }

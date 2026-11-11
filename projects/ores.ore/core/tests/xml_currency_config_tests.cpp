@@ -33,15 +33,15 @@ namespace {
 using namespace ores::logging;
 using ores::refdata::domain::currency;
 
-const std::string text = "<CurrencyConfig><Currency>"
-                         "<Name>Japanese Yen</Name><ISOCode>JPY</ISOCode>"
-                         "<NumericCode>392</NumericCode><Symbol>\u00a5</Symbol>"
-                         "<FractionSymbol>sen</FractionSymbol>"
-                         "<FractionsPerUnit>100</FractionsPerUnit>"
-                         "<RoundingType>Closest</RoundingType>"
-                         "<RoundingPrecision>0</RoundingPrecision>"
-                         "<CurrencyType>Major</CurrencyType>"
-                         "</Currency></CurrencyConfig>";
+const std::string currency_config_xml = "<CurrencyConfig><Currency>"
+                                        "<Name>Japanese Yen</Name><ISOCode>JPY</ISOCode>"
+                                        "<NumericCode>392</NumericCode><Symbol>\u00a5</Symbol>"
+                                        "<FractionSymbol>sen</FractionSymbol>"
+                                        "<FractionsPerUnit>100</FractionsPerUnit>"
+                                        "<RoundingType>Closest</RoundingType>"
+                                        "<RoundingPrecision>0</RoundingPrecision>"
+                                        "<CurrencyType>Major</CurrencyType>"
+                                        "</Currency></CurrencyConfig>";
 
 /**
  * @brief Imports, exports and imports again, comparing the entities.
@@ -76,7 +76,8 @@ void require_round_trip(const std::vector<currency>& original) {
 TEST_CASE("a_currency_states_its_own_fields", "[ore][xml]") {
     auto lg(make_logger(test_suite));
 
-    const auto imported = ores::ore::xml::importer::import_currency_config_text(text);
+    const auto imported =
+        ores::ore::xml::importer::import_currency_config_text(currency_config_xml);
     REQUIRE(imported.size() == 1);
     BOOST_LOG_SEV(lg, info) << "currencies: " << imported.size();
 
@@ -99,7 +100,7 @@ TEST_CASE("a_numeric_code_keeps_its_leading_zeros", "[ore][xml]") {
 
     // The document carries the code as a number, so 036 arrives as 36; the
     // tenant holds the three digits ISO 4217 gives it.
-    std::string aud = text;
+    std::string aud = currency_config_xml;
     aud.replace(aud.find("392"), 3, "36");
     const auto imported = ores::ore::xml::importer::import_currency_config_text(aud);
     REQUIRE(imported.size() == 1);
@@ -154,7 +155,7 @@ TEST_CASE("every_rounding_type_the_schema_allows_round_trips", "[ore][xml]") {
 TEST_CASE("a_rounding_type_ore_does_not_have_is_refused_on_export", "[ore][xml]") {
     auto lg(make_logger(test_suite));
 
-    auto imported = ores::ore::xml::importer::import_currency_config_text(text);
+    auto imported = ores::ore::xml::importer::import_currency_config_text(currency_config_xml);
     REQUIRE(imported.size() == 1);
     imported[0].rounding_type = "Sideways";
 
@@ -164,7 +165,7 @@ TEST_CASE("a_rounding_type_ore_does_not_have_is_refused_on_export", "[ore][xml]"
 TEST_CASE("a_numeric_code_that_is_not_a_number_is_left_out", "[ore][xml]") {
     auto lg(make_logger(test_suite));
 
-    auto imported = ores::ore::xml::importer::import_currency_config_text(text);
+    auto imported = ores::ore::xml::importer::import_currency_config_text(currency_config_xml);
     REQUIRE(imported.size() == 1);
     imported[0].numeric_code = "not-a-number";
 

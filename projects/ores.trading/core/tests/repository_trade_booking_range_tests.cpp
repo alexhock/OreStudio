@@ -133,12 +133,12 @@ TEST_CASE("a date range holds the bookings whose trade date lies in it, bounds i
     fixture f;
     const auto first = f.write_booking(ymd(2026, 3, 1), std::nullopt);
     const auto middle = f.write_booking(ymd(2026, 3, 15), std::nullopt);
-    const auto last = f.write_booking(ymd(2026, 3, 31), std::nullopt);
+    const auto last_booking = f.write_booking(ymd(2026, 3, 31), std::nullopt);
 
     trade_bookings_filter range;
     range.trade_date_from = "2026-03-15";
     range.trade_date_to = "2026-03-31";
-    CHECK(f.read(range) == sorted({middle, last}));
+    CHECK(f.read(range) == sorted({middle, last_booking}));
 
     range = {};
     range.trade_date_to = "2026-03-01";
@@ -146,7 +146,7 @@ TEST_CASE("a date range holds the bookings whose trade date lies in it, bounds i
 
     range = {};
     range.trade_date_from = "2026-03-02";
-    CHECK(f.read(range) == sorted({middle, last}));
+    CHECK(f.read(range) == sorted({middle, last_booking}));
 }
 
 TEST_CASE("a range excludes a booking that has no trade date", "[repository][list_filter][range]") {

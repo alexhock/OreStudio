@@ -178,11 +178,11 @@ TEST_CASE("build_deduplicates_shared_portfolio_parent", "[ore][hierarchy][hierar
     // 1 portfolio (Rates) + 2 books
     REQUIRE(nodes.size() == 3);
 
-    long portfolio_count = std::count_if(
+    const auto portfolio_count = std::count_if(
         nodes.begin(), nodes.end(), [](const auto& n) { return n.type == nt::portfolio; });
     CHECK(portfolio_count == 1);
 
-    long book_count =
+    const auto book_count =
         std::count_if(nodes.begin(), nodes.end(), [](const auto& n) { return n.type == nt::book; });
     CHECK(book_count == 2);
 }

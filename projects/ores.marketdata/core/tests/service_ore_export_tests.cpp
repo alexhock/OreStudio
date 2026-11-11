@@ -339,10 +339,10 @@ TEST_CASE("export_with_a_date_keeps_the_history_and_writes_the_value_at_the_clos
         std::vector<std::string> lines;
         std::istringstream in(body);
         for (std::string line; std::getline(in, line);) {
-            const auto first = line.find('\t');
-            const auto last = line.rfind('\t');
-            if (first != std::string::npos && last != first)
-                lines.push_back(line.substr(0, first) + " " + line.substr(last + 1));
+            const auto first_tab = line.find('\t');
+            const auto last_tab = line.rfind('\t');
+            if (first_tab != std::string::npos && last_tab != first_tab)
+                lines.push_back(line.substr(0, first_tab) + " " + line.substr(last_tab + 1));
         }
         std::ranges::sort(lines);
         return lines;

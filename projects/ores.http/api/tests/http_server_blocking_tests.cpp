@@ -29,6 +29,7 @@
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <cstdint>
 #include <string>
 #include <thread>
 
@@ -123,7 +124,7 @@ TEST_CASE("a_blocked_handler_does_not_stop_health_answering", "[http_server][wor
     std::thread io_thread([&io] { io.run(); });
 
     // Wait for the acceptor to bind, which is when the port becomes readable.
-    auto port = 0;
+    std::uint16_t port = 0;
     for (auto attempt = 0; attempt < 500 && port == 0; ++attempt) {
         port = server->bound_port();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));

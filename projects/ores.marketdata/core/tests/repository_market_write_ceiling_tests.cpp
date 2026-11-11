@@ -78,7 +78,8 @@ using stopwatch = std::chrono::steady_clock;
 const std::string repository_tags("[.write_ceiling_repository]");
 const std::string copy_tags("[.write_ceiling_copy]");
 
-const std::string uri = "oresmd://fx/USD?type=quote&instrument=fx_spot&quote=rate&ccy=TRY";
+const std::string write_ceiling_series_uri =
+    "oresmd://fx/USD?type=quote&instrument=fx_spot&quote=rate&ccy=TRY";
 
 /// A setting of the process environment, read through the platform provider.
 ///
@@ -208,8 +209,8 @@ std::string observation_text(std::size_t count,
         const auto stamp = std::format("{:%Y-%m-%d %H:%M:%S}+00", at);
         out += boost::uuids::to_string(gen());
         out += '\t' + tenant + '\t' + party + '\t' + series[(first + i) % series.size()] + '\t';
-        out += stamp + '\t' + uri + "\t43.98966624067043\tsynthetic.bloomberg.usdtry\t" + stamp +
-               "\tinfinity\n";
+        out += stamp + '\t' + write_ceiling_series_uri +
+               "\t43.98966624067043\tsynthetic.bloomberg.usdtry\t" + stamp + "\tinfinity\n";
     }
     return out;
 }
@@ -282,7 +283,7 @@ TEST_CASE("write_ceiling_of_the_repository_insert", repository_tags) {
                 o.id = gen();
                 o.series_id = pool[next % pool.size()];
                 o.observation_datetime = base + microseconds{static_cast<std::int64_t>(next * 10)};
-                o.oresmd_uri = uri;
+                o.oresmd_uri = write_ceiling_series_uri;
                 o.value = "43.98966624067043";
                 rows.push_back(std::move(o));
             }

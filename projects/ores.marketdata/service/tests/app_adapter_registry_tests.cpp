@@ -57,14 +57,15 @@ adapter_announce_request announce(const std::string& provider = "bloomberg") {
     return r;
 }
 
-const auto t0 = std::chrono::system_clock::now();
+const auto registry_test_time = std::chrono::system_clock::now();
 
 }
 
 TEST_CASE("an_adapter_of_a_known_provider_is_ready_after_its_announce", "[app][adapter_registry]") {
     adapter_registry sut;
 
-    const auto response = sut.announce(announce(), app_adapter_registry_catalogue(), t0);
+    const auto response =
+        sut.announce(announce(), app_adapter_registry_catalogue(), registry_test_time);
 
     CHECK(response.success);
     CHECK(response.served_count == 2);
@@ -79,7 +80,8 @@ TEST_CASE("an_adapter_of_a_known_provider_is_ready_after_its_announce", "[app][a
 TEST_CASE("an_adapter_of_an_unknown_provider_is_rejected", "[app][adapter_registry]") {
     adapter_registry sut;
 
-    const auto response = sut.announce(announce("nobody"), app_adapter_registry_catalogue(), t0);
+    const auto response =
+        sut.announce(announce("nobody"), app_adapter_registry_catalogue(), registry_test_time);
 
     CHECK_FALSE(response.success);
     CHECK_FALSE(response.message.empty());
@@ -92,7 +94,8 @@ TEST_CASE("an_adapter_of_an_unknown_module_is_rejected", "[app][adapter_registry
 
     auto request = announce();
     request.adapter_code = "bloomberg-api";
-    const auto response = sut.announce(request, app_adapter_registry_catalogue(), t0);
+    const auto response =
+        sut.announce(request, app_adapter_registry_catalogue(), registry_test_time);
 
     CHECK_FALSE(response.success);
     CHECK(response.message.find("bloomberg-api") != std::string::npos);
@@ -104,14 +107,15 @@ TEST_CASE("an_announce_with_no_adapter_id_is_refused", "[app][adapter_registry]"
     auto request = announce();
     request.adapter_id.clear();
 
-    CHECK_FALSE(sut.announce(request, app_adapter_registry_catalogue(), t0).success);
+    CHECK_FALSE(
+        sut.announce(request, app_adapter_registry_catalogue(), registry_test_time).success);
     CHECK(sut.status().empty());
 }
 
 TEST_CASE("an_accepted_demand_makes_an_adapter_serve_and_an_empty_one_makes_it_ready",
           "[app][adapter_registry]") {
     adapter_registry sut;
-    sut.announce(announce(), app_adapter_registry_catalogue(), t0);
+    sut.announce(announce(), app_adapter_registry_catalogue(), registry_test_time);
 
     adapter_demand_response accepted;
     accepted.accepted = {id("EURUSD Curncy")};
@@ -126,7 +130,7 @@ TEST_CASE("an_accepted_demand_makes_an_adapter_serve_and_an_empty_one_makes_it_r
 TEST_CASE("the_status_shows_the_accepted_and_rejected_ids_of_the_last_reply",
           "[app][adapter_registry]") {
     adapter_registry sut;
-    sut.announce(announce(), app_adapter_registry_catalogue(), t0);
+    sut.announce(announce(), app_adapter_registry_catalogue(), registry_test_time);
     adapter_demand_response reply;
     reply.accepted = {id("EURUSD Curncy")};
     reply.rejected = {rejected_id{id("XAUUSD Curncy"), "not_entitled"}};
@@ -146,41 +150,41 @@ TEST_CASE("the_status_shows_the_accepted_and_rejected_ids_of_the_last_reply",
 
 TEST_CASE("a_missed_heartbeat_makes_an_adapter_stale", "[app][adapter_registry]") {
     adapter_registry sut(15s);
-    sut.announce(announce(), app_adapter_registry_catalogue(), t0);
+    sut.announce(announce(), app_adapter_registry_catalogue(), registry_test_time);
     adapter_demand_response accepted;
     accepted.accepted = {id("EURUSD Curncy")};
     sut.demand_replied("bloomberg-sim", 1, accepted);
 
-    CHECK(sut.expire(t0 + 14s).empty());
-    const auto stale = sut.expire(t0 + 16s);
+    CHECK(sut.expire(registry_test_time + 14s).empty());
+    const auto stale = sut.expire(registry_test_time + 16s);
 
     REQUIRE(stale.size() == 1);
     CHECK(stale.front() == "bloomberg-sim");
     CHECK(sut.state_of("bloomberg-sim") == adapter_state::stale);
     CHECK(sut.demandable().empty());
-    CHECK(sut.expire(t0 + 30s).empty());
+    CHECK(sut.expire(registry_test_time + 30s).empty());
 }
 
 TEST_CASE("a_heartbeat_keeps_an_adapter_from_going_stale", "[app][adapter_registry]") {
     adapter_registry sut(15s);
-    sut.announce(announce(), app_adapter_registry_catalogue(), t0);
+    sut.announce(announce(), app_adapter_registry_catalogue(), registry_test_time);
 
-    const auto outcome = sut.heartbeat("bloomberg-sim", 1, t0 + 10s);
+    const auto outcome = sut.heartbeat("bloomberg-sim", 1, registry_test_time + 10s);
 
     CHECK(outcome.known);
     CHECK_FALSE(outcome.recovered);
-    CHECK(sut.expire(t0 + 20s).empty());
-    CHECK(sut.expire(t0 + 26s).size() == 1);
+    CHECK(sut.expire(registry_test_time + 20s).empty());
+    CHECK(sut.expire(registry_test_time + 26s).size() == 1);
 }
 
 TEST_CASE("a_returning_heartbeat_makes_a_stale_adapter_ready_and_asks_for_demand",
           "[app][adapter_registry]") {
     adapter_registry sut(15s);
-    sut.announce(announce(), app_adapter_registry_catalogue(), t0);
-    (void)sut.expire(t0 + 20s);
+    sut.announce(announce(), app_adapter_registry_catalogue(), registry_test_time);
+    (void)sut.expire(registry_test_time + 20s);
     REQUIRE(sut.state_of("bloomberg-sim") == adapter_state::stale);
 
-    const auto outcome = sut.heartbeat("bloomberg-sim", 7, t0 + 21s);
+    const auto outcome = sut.heartbeat("bloomberg-sim", 7, registry_test_time + 21s);
 
     CHECK(outcome.known);
     CHECK(outcome.recovered);
@@ -191,7 +195,7 @@ TEST_CASE("a_returning_heartbeat_makes_a_stale_adapter_ready_and_asks_for_demand
 TEST_CASE("a_heartbeat_of_an_unknown_adapter_changes_nothing", "[app][adapter_registry]") {
     adapter_registry sut;
 
-    const auto outcome = sut.heartbeat("nobody", 1, t0);
+    const auto outcome = sut.heartbeat("nobody", 1, registry_test_time);
 
     CHECK_FALSE(outcome.known);
     CHECK(sut.status().empty());
@@ -199,9 +203,9 @@ TEST_CASE("a_heartbeat_of_an_unknown_adapter_changes_nothing", "[app][adapter_re
 
 TEST_CASE("a_rejected_adapter_never_goes_stale_or_serves", "[app][adapter_registry]") {
     adapter_registry sut(15s);
-    sut.announce(announce("nobody"), app_adapter_registry_catalogue(), t0);
+    sut.announce(announce("nobody"), app_adapter_registry_catalogue(), registry_test_time);
 
-    CHECK(sut.expire(t0 + 60s).empty());
+    CHECK(sut.expire(registry_test_time + 60s).empty());
     adapter_demand_response accepted;
     accepted.accepted = {id("EURUSD Curncy")};
     sut.demand_replied("bloomberg-sim", 1, accepted);
@@ -211,11 +215,11 @@ TEST_CASE("a_rejected_adapter_never_goes_stale_or_serves", "[app][adapter_regist
 
 TEST_CASE("a_stale_adapter_keeps_its_last_reply", "[app][adapter_registry]") {
     adapter_registry sut(15s);
-    sut.announce(announce(), app_adapter_registry_catalogue(), t0);
+    sut.announce(announce(), app_adapter_registry_catalogue(), registry_test_time);
     adapter_demand_response accepted;
     accepted.accepted = {id("EURUSD Curncy")};
     sut.demand_replied("bloomberg-sim", 1, accepted);
-    (void)sut.expire(t0 + 20s);
+    (void)sut.expire(registry_test_time + 20s);
 
     sut.demand_replied("bloomberg-sim", 0, adapter_demand_response{});
 
@@ -225,12 +229,12 @@ TEST_CASE("a_stale_adapter_keeps_its_last_reply", "[app][adapter_registry]") {
 
 TEST_CASE("a_second_announce_starts_the_adapter_again", "[app][adapter_registry]") {
     adapter_registry sut;
-    sut.announce(announce(), app_adapter_registry_catalogue(), t0);
+    sut.announce(announce(), app_adapter_registry_catalogue(), registry_test_time);
     adapter_demand_response accepted;
     accepted.accepted = {id("EURUSD Curncy")};
     sut.demand_replied("bloomberg-sim", 1, accepted);
 
-    sut.announce(announce(), app_adapter_registry_catalogue(), t0 + 1s);
+    sut.announce(announce(), app_adapter_registry_catalogue(), registry_test_time + 1s);
 
     CHECK(sut.state_of("bloomberg-sim") == adapter_state::ready);
     CHECK(sut.status().front().accepted.empty());

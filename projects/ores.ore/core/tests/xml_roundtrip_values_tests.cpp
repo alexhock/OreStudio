@@ -134,8 +134,8 @@ auto round_trip_values(const document_type& doc,
     const auto differences =
         diff_values(value_fingerprint(*source), value_fingerprint(*written_document));
     if (!differences.empty()) {
-        for (const auto& difference : differences)
-            report += (report.empty() ? "" : "; ") + describe(difference);
+        for (const auto& value_difference : differences)
+            report += (report.empty() ? "" : "; ") + describe(value_difference);
         return false;
     }
     return true;

@@ -28,7 +28,9 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
-#include <sys/resource.h>
+#ifndef _WIN32
+#    include <sys/resource.h>
+#endif
 
 namespace {
 
@@ -63,10 +65,14 @@ std::string raw_cube(std::size_t rows) {
     return csv;
 }
 
-long peak_mib() {
+std::string peak_mib() {
+#ifdef _WIN32
+    return "unavailable";
+#else
     rusage usage{};
     getrusage(RUSAGE_SELF, &usage);
-    return usage.ru_maxrss / 1024;
+    return std::to_string(usage.ru_maxrss / 1024);
+#endif
 }
 
 }

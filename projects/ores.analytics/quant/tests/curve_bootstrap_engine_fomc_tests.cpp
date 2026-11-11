@@ -60,7 +60,7 @@ namespace {
 
 constexpr auto meeting_count = 8;
 const std::string split_code = "1Y";
-const auto value_date = 2026y / January / 2d;
+const auto fomc_value_date = 2026y / January / 2d;
 
 // A non-flat target curve -- r(t) = base + slope * t -- so the guarantees
 // exercise interpolation rather than trivially passing on a flat curve.
@@ -68,7 +68,7 @@ constexpr double base_rate = 0.02;
 constexpr double rate_slope = 0.005;
 
 double true_df(year_month_day d) {
-    const double t = day_count_calculator::year_fraction(value_date, d, A365);
+    const double t = day_count_calculator::year_fraction(fomc_value_date, d, A365);
     return std::exp(-(base_rate + rate_slope * t) * t);
 }
 
@@ -89,7 +89,8 @@ std::vector<year_month_day> fomc_2026_meeting_dates() {
 // boundary (spot + 1 year).
 std::vector<year_month_day> fomc_grid() {
     auto out = fomc_2026_meeting_dates();
-    out.push_back(year(int(value_date.year()) + 1) / value_date.month() / value_date.day());
+    out.push_back(year(int(fomc_value_date.year()) + 1) / fomc_value_date.month() /
+                  fomc_value_date.day());
     return out;
 }
 
@@ -101,15 +102,15 @@ std::vector<bootstrap_pillar> make_fomc_pillars() {
     std::vector<bootstrap_pillar> out;
 
     {
-        const double yf = day_count_calculator::year_fraction(value_date, dates[0], A365);
+        const double yf = day_count_calculator::year_fraction(fomc_value_date, dates[0], A365);
         const double rate = curve_instrument_pricer::deposit_rate(true_df(dates[0]), yf);
-        out.push_back({"1F", DEPOSIT, rate, value_date, dates[0], {}});
+        out.push_back({"1F", DEPOSIT, rate, fomc_value_date, dates[0], {}});
     }
 
     for (int i = 1; i <= meeting_count; ++i) {
         std::vector<year_month_day> schedule(dates.begin(), dates.begin() + i + 1);
         std::vector<double> dfs, accruals;
-        auto previous = value_date;
+        auto previous = fomc_value_date;
         for (const auto& d : schedule) {
             dfs.push_back(true_df(d));
             accruals.push_back(day_count_calculator::year_fraction(previous, d, A365));
@@ -118,7 +119,7 @@ std::vector<bootstrap_pillar> make_fomc_pillars() {
         const double rate =
             curve_instrument_pricer::swap_par_rate(1.0, true_df(dates[i]), dfs, accruals);
         const std::string point_id = i < meeting_count ? std::to_string(i + 1) + "F" : split_code;
-        out.push_back({point_id, SWAP, rate, value_date, dates[i], schedule});
+        out.push_back({point_id, SWAP, rate, fomc_value_date, dates[i], schedule});
     }
     return out;
 }
@@ -140,7 +141,7 @@ implied_forward(const std::vector<bootstrapped_point>& points, year_month_day a,
 TEST_CASE("bootstrap recovers the true discount factors at every FOMC pillar date",
           "[curve_bootstrap_engine][fomc]") {
     const auto result = curve_bootstrap_engine::bootstrap(
-        value_date, make_fomc_pillars(), A365, FLAT_FORWARD_THEN_LOG_LINEAR);
+        fomc_value_date, make_fomc_pillars(), A365, FLAT_FORWARD_THEN_LOG_LINEAR);
 
     REQUIRE(result.size() == meeting_count + 1);
     for (const auto& point : result)
@@ -152,7 +153,7 @@ TEST_CASE("the published forward rate between two consecutive FOMC pillars is co
           "[curve_bootstrap_engine][fomc]") {
     const auto dates = fomc_grid();
     const auto result = curve_bootstrap_engine::bootstrap(
-        value_date, make_fomc_pillars(), A365, FLAT_FORWARD_THEN_LOG_LINEAR);
+        fomc_value_date, make_fomc_pillars(), A365, FLAT_FORWARD_THEN_LOG_LINEAR);
 
     // Three interior query dates within the first meeting interval.
     const auto q1 = year_month_day(sys_days(dates[0]) + days(5));
@@ -172,7 +173,7 @@ TEST_CASE("the discount function is continuous across the split tenor",
           "[curve_bootstrap_engine][fomc]") {
     const auto dates = fomc_grid();
     const auto result = curve_bootstrap_engine::bootstrap(
-        value_date, make_fomc_pillars(), A365, FLAT_FORWARD_THEN_LOG_LINEAR);
+        fomc_value_date, make_fomc_pillars(), A365, FLAT_FORWARD_THEN_LOG_LINEAR);
 
     // The boundary: the last FOMC pillar date, where the short-end segment
     // hands over to the post-split segment ending at the 1Y split tenor.

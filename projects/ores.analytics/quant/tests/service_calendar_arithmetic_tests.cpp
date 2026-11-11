@@ -409,14 +409,14 @@ TEST_CASE("the last business day of a month stays inside the month it was asked 
 
     for (unsigned month_index = 1; month_index <= 12; ++month_index) {
         const auto any_day = year{2026} / std::chrono::month{month_index} / 15;
-        const auto last = calendar_arithmetic::last_business_day(
+        const auto month_end = calendar_arithmetic::last_business_day(
             any_day, business_day_convention::preceding, target, calendars);
 
         CAPTURE(month_index);
-        CHECK(last.month() == any_day.month());
-        CHECK(last.year() == any_day.year());
-        CHECK(calendars.is_business_day(target, last));
-        CHECK(calendar_arithmetic::is_end_of_month(last, target, calendars));
+        CHECK(month_end.month() == any_day.month());
+        CHECK(month_end.year() == any_day.year());
+        CHECK(calendars.is_business_day(target, month_end));
+        CHECK(calendar_arithmetic::is_end_of_month(month_end, target, calendars));
     }
 }
 

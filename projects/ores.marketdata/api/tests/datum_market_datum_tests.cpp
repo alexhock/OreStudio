@@ -275,7 +275,7 @@ TEST_CASE("every_asset_class_but_correlation_and_generic_is_a_refdata_asset_clas
     for (std::size_t i = 0; i < asset_class_count; ++i) {
         const auto a = static_cast<asset_class>(i);
         INFO("asset class: " << name_of(a));
-        const bool none = a == asset_class::correlation || a == asset_class::generic;
-        CHECK(asset_class_for_authority(name_of(a)).has_value() != none);
+        const bool no_refdata_class = a == asset_class::correlation || a == asset_class::generic;
+        CHECK(asset_class_for_authority(name_of(a)).has_value() != no_refdata_class);
     }
 }

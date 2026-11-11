@@ -149,15 +149,15 @@ TEST_CASE("each series keeps its own law in operational time", "[tick_scheduler]
     rng_stream stream(stream_key{.run_seed = 0, .series = 0, .purpose = draw_purpose::arrival});
     auto law = twin_law(7, hawkes, stream);
     std::vector<double> compensated;
-    double last = 0.0;
+    double previous_tau = 0.0;
     for (const double tau : taus[id_h]) {
         const double gap = ores::analytics::quant::domain::draw_gap(law, stream);
-        CHECK((tau - last) * hawkes.sensitivity == Catch::Approx(gap).margin(1e-9));
+        CHECK((tau - previous_tau) * hawkes.sensitivity == Catch::Approx(gap).margin(1e-9));
         const auto& h = std::get<hawkes_law>(law);
         compensated.push_back(h.baseline * gap +
                               h.excess * (1.0 - std::exp(-h.decay * gap)) / h.decay);
         ores::analytics::quant::domain::record_event(law, gap);
-        last = tau;
+        previous_tau = tau;
     }
     REQUIRE(compensated.size() > 10000);
     CHECK(ks_exponential(compensated) < 1.63 / std::sqrt(static_cast<double>(compensated.size())));

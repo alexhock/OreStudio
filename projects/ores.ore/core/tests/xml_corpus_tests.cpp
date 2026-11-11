@@ -152,8 +152,8 @@ TEST_CASE("every_ore_example_survives_a_round_trip_and_writes_back_out",
         }
 
         const auto target = output / fs::relative(entry.path(), root);
-        std::error_code ignored;
-        fs::create_directories(target.parent_path(), ignored);
+        std::error_code directory_error;
+        fs::create_directories(target.parent_path(), directory_error);
         std::ofstream file(target, std::ios::binary);
         file << written;
         if (!file) {

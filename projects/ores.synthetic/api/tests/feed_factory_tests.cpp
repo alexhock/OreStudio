@@ -125,12 +125,12 @@ ores::synthetic::feed::ir_curve_refdata_context make_refdata_context() {
 
     ores::synthetic::feed::ir_curve_refdata_context ctx;
 
-    tenor spot;
-    spot.code = "SPOT";
-    spot.kind = "PERIOD";
-    spot.unit = "DAY";
-    spot.multiplier = 0;
-    ctx.tenors_by_code.emplace("SPOT", spot);
+    tenor spot_tenor;
+    spot_tenor.code = "SPOT";
+    spot_tenor.kind = "PERIOD";
+    spot_tenor.unit = "DAY";
+    spot_tenor.multiplier = 0;
+    ctx.tenors_by_code.emplace("SPOT", spot_tenor);
 
     // A short ladder: a month, a quarter and two years, so a curve can name more
     // than one rung and the months and years units are both exercised.

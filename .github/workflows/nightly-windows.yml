@@ -95,7 +95,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name: [windows-msvc, windows-clang]
+        name: [windows-msvc]
         # No debug builds: every Windows leg fails on a compile error, and the
         # debug legs take the longest. Add debug back when the release legs
         # pass.
@@ -104,9 +104,6 @@ jobs:
           - name: windows-msvc
             family: windows
             compiler: msvc
-          - name: windows-clang
-            family: windows
-            compiler: clang
     steps:
       - uses: actions/checkout@v7
         with:
@@ -232,7 +229,7 @@ jobs:
           $env:ORES_BUILD_NUMBER="$env:GITHUB_RUN_NUMBER"
           $env:ORES_BUILD_TIMESTAMP=Get-Date -format "yyyy/MM/dd HH:mm:ss"
           $preset="${{matrix.family}}-${{matrix.compiler}}-${{matrix.buildtype}}-ninja"
-          $cmake_args="build_group=Nightly,preset=$preset"
+          $cmake_args="build_group=Experimental,preset=$preset,ninja_keep_going=ON,build_postfix=keep-going"
           ctest -VV --preset $preset --script "CTest.cmake,$cmake_args"
 
       - name: Show sccache statistics

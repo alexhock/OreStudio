@@ -194,6 +194,11 @@ endif()
 # We assume Ninja, but this also works for make.
 message(STATUS "Number of parallel jobs: ${nproc}")
 set(CTEST_BUILD_FLAGS "-l${nproc}")
+if(ninja_keep_going)
+    string(APPEND CTEST_BUILD_FLAGS " -k 0")
+    set(CTEST_CUSTOM_MAXIMUM_NUMBER_OF_ERRORS 1000)
+    set(CTEST_CUSTOM_MAXIMUM_NUMBER_OF_WARNINGS 1000)
+endif()
 
 # How long to wait between timed-out CTest submissions
 set(retry_delay 300)

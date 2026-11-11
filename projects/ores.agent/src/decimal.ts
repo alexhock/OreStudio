@@ -31,6 +31,11 @@ export function decimalText(value: string): string {
     const { coefficient, scale } = textParts(value);
     return renderDecimal(coefficient, scale);
 }
+export function decimalProduct(left: string, right: string): string {
+    const a = textParts(left);
+    const b = textParts(right);
+    return renderDecimal(a.coefficient * b.coefficient, a.scale + b.scale);
+}
 function renderDecimal(sum: bigint, scale: number): string {
     const digits = (sum < 0n ? -sum : sum).toString().padStart(scale + 1, '0');
     const text = scale

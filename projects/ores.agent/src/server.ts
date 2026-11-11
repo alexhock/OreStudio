@@ -13,6 +13,10 @@ import { serveUi } from './ui.js';
 import { renderMarkdown } from './markdown.js';
 import { version } from './version.js';
 import { tracedBackend } from './telemetry.js';
+import { NpvRuns } from './npv-runs.js';
+import { BookingDrafts } from './booking-drafts.js';
+import { TradeBookings } from './trade-bookings.js';
+import { marketId } from './market.js';
 
 export function json(res: ServerResponse, status: number, body: unknown): void {
     res.writeHead(status, {
@@ -34,14 +38,28 @@ export async function body(req: IncomingMessage): Promise<unknown> {
     return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-export function createApp(config: Config, backend?: Backend) {
+export function createApp(config: Config, backend?: Backend, submissionDirectory?: string) {
     if (backend) backend = tracedBackend(backend);
     const sessions = backend ? new Sessions(backend) : undefined;
     const executor = backend ? new ToolExecutor(backend) : undefined;
     const mcp = sessions && executor ? createMcp(sessions, executor) : undefined;
+    const inference = new HttpInference(config.inference);
+    const reportRuns =
+        backend && submissionDirectory
+            ? new NpvRuns(backend, submissionDirectory, executor)
+            : undefined;
     const agent = executor
-        ? new Agent(new HttpInference(config.inference), executor, (event) =>
-              console.log(JSON.stringify(event)),
+        ? new Agent(
+              inference,
+              executor,
+              (event) => console.log(JSON.stringify(event)),
+              reportRuns,
+              new BookingDrafts(
+                  inference,
+                  executor,
+                  backend ? new TradeBookings(backend) : undefined,
+                  backend,
+              ),
           )
         : undefined;
     const server = createServer((req, res) => {
@@ -70,6 +88,26 @@ export function createApp(config: Config, backend?: Backend) {
             }
             const session = sessions.require(req.headers.authorization);
             if (req.url === '/mcp' && mcp) return await mcp.handle(req, res);
+            if (req.method === 'POST' && req.url === '/chat/reset' && agent) {
+                agent.resetChat(session);
+                return json(res, 200, { reset: true });
+            }
+            if (req.method === 'POST' && req.url === '/chat/report-progress' && reportRuns) {
+                const { runId } = z
+                    .object({ runId: marketId })
+                    .strict()
+                    .parse(await body(req));
+                const abort = new AbortController();
+                res.on('close', () => {
+                    if (!res.writableFinished) abort.abort();
+                });
+                const progress = await reportRuns.progress(
+                    runId.toLowerCase(),
+                    session,
+                    abort.signal,
+                );
+                return json(res, 200, { ...progress, answerHtml: renderMarkdown(progress.answer) });
+            }
             if (req.method === 'POST' && req.url === '/chat' && agent) {
                 const abort = new AbortController();
                 res.on('close', () => {

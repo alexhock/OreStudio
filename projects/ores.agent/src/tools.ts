@@ -6,10 +6,16 @@ import { MarketLookup, marketId, marketSeries, fxInput, irInput } from './market
 import { Discovery, discoveryTools } from './discovery.js';
 import { Reporting, reportingTools } from './reporting.js';
 import { ScopeReporting, scopeTools } from './scope-reporting.js';
+import { FxAnalytics, analyticsTools } from './fx-analytics.js';
+import { FxMarketCurve, marketCurveTools } from './fx-market-curve.js';
+import { helpTool, searchHelp } from './help.js';
 
 const page = { offset: 0, order: { field: '', descending: false }, filter: null, as_of: null };
 const limit = z.number().int().min(1).max(50).default(10);
 export const tools = {
+    search_help: helpTool,
+    ...marketCurveTools,
+    ...analyticsTools,
     ...discoveryTools,
     ...reportingTools,
     ...scopeTools,
@@ -20,7 +26,7 @@ export const tools = {
     },
     read_ir_rate: {
         description:
-            'Read an exact IR point: currency, instrument (ir_swap/mm/zero/discount) and maturity term, e.g. 5Y. Floating-leg tenor is separate. Returns provider, dated source and freshness; asks for clarification if ambiguous. No interpolation or pricing.',
+            'Read a stored IR point by currency and point maturity, e.g. 5Y. Preserve explicit instrument (ir_swap/mm/zero/discount), curve, index, floating-leg tenor and forward start. Returns provider, dated source and freshness; asks for clarification if ambiguous. No interpolation or pricing.',
         schema: irInput,
     },
     list_currencies: {
@@ -71,6 +77,8 @@ export class ToolExecutor {
     private discovery: Discovery;
     private reporting: Reporting;
     private scopeReporting: ScopeReporting;
+    private analytics: FxAnalytics;
+    private marketCurve: FxMarketCurve;
     constructor(
         private backend: Backend,
         private audit: (event: Record<string, unknown>) => void = (e) =>
@@ -80,6 +88,8 @@ export class ToolExecutor {
         this.discovery = new Discovery(backend);
         this.reporting = new Reporting(backend);
         this.scopeReporting = new ScopeReporting(backend);
+        this.analytics = new FxAnalytics(backend);
+        this.marketCurve = new FxMarketCurve(backend);
     }
     async execute(
         name: string,
@@ -92,7 +102,9 @@ export class ToolExecutor {
         if (!Object.hasOwn(tools, name))
             throw new AppError('unknown_tool', 'Tool is not available.', 400);
         const spec = tools[name as keyof typeof tools];
-        const input = spec.schema.parse(args);
+        const input = Object.hasOwn(analyticsTools, name)
+            ? (args as Record<string, unknown>)
+            : spec.schema.parse(args);
         const now = Date.now();
         if (now - session.window > 60000) {
             session.window = now;
@@ -105,6 +117,30 @@ export class ToolExecutor {
         let outcome = 'failed';
         try {
             signal?.throwIfAborted();
+            if (name === 'search_help') {
+                const { query } = input as z.infer<typeof helpTool.schema>;
+                outcome = 'ok';
+                return searchHelp(query);
+            }
+            if (Object.hasOwn(marketCurveTools, name)) {
+                const output = await this.marketCurve.execute(input, session, signal);
+                if (Buffer.byteLength(JSON.stringify(output)) > 32768)
+                    throw new AppError('oversized_result', 'Tool output exceeds its limit.');
+                outcome = 'ok';
+                return output;
+            }
+            if (Object.hasOwn(analyticsTools, name)) {
+                const output = await this.analytics.execute(
+                    name as keyof typeof analyticsTools,
+                    input,
+                    session,
+                    signal,
+                );
+                if (Buffer.byteLength(JSON.stringify(output)) > 32768)
+                    throw new AppError('oversized_result', 'Tool output exceeds its limit.');
+                outcome = 'ok';
+                return output;
+            }
             if (Object.hasOwn(scopeTools, name)) {
                 const output = await this.scopeReporting.execute(input, session, signal);
                 if (Buffer.byteLength(JSON.stringify(output)) > 32768)

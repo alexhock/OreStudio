@@ -63,6 +63,16 @@ Examples: "Pay fixed, receive floating on a 100M USD five-year SOFR swap with X.
 - [ ] Keep VCON delivery and executable pricing unavailable until an existing
   integration supports them; do not fabricate tickets or quotes.
 
+| Product | Agent support |
+| --- | --- |
+| Plain USD SOFR swap | Review and confirm a fixed-versus-floating swap with explicit dates, schedules, rates and conventions. |
+| Cash bond | Editable review and issue lookup by UUID. The booking row has issue and notional fields, with no fields for the transaction price or side. |
+| EUR/USD risk reversal | Package booking unavailable. Structure completion requires separately persisted FX option drafts. |
+| CDX IG | No verified booking adapter for index series/version, constituents and protection terms. |
+| Boeing CDS | No verified booking adapter for reference obligation, protection direction and contract conventions. |
+| SPX collar | Package booking unavailable. Structure completion requires separately persisted drafts for its members. |
+| NVDA option | Listed-contract booking unavailable. The equity option row stores underlying quantity and strike/expiry. It has no separate fields for contract count and multiplier. |
+
 ## 4. Start a report and follow its progress
 
 Example: "Run the NPV report for book Group FX Hedges at <DATE>, then show the results."
@@ -112,21 +122,89 @@ Examples: "Show Delta, Gamma and DV01 for this book from run <RUN_ID>."
 Examples: "What is the six-month GBP rate as of <DATE>?"
 "What was EUR/USD spot from <PROVIDER> on <DATE>?"
 
-- [ ] Improve rate intent parsing: distinguish maturity from floating tenor and
+- [x] Improve rate intent parsing: distinguish maturity from floating tenor and
   resolve instrument, curve, index, provider and forward start through clarification.
 - [ ] Verify a positive live IR lookup when suitable existing observations are
   available; report a data blocker otherwise. Do not change business data to pass.
-- [ ] Preserve dated evidence, decimal units, provider selection and stale-data checks.
-- [ ] Cover paraphrases and multi-turn provider/series selection with model evaluations.
+- [x] Preserve dated evidence, decimal units, provider selection and stale-data checks.
+- [x] Cover paraphrases and multi-turn provider/series selection with model evaluations.
 
-## 8. Deferred queries with current capability blockers
+## 8. Build and validate an FX forward curve
+
+Example: "Using the supplied EUR/USD spot, forward quotes and USD discount
+curve, build the FX-consistent EUR curve and validate it against the quotes."
+
+- [x] Accept supplied spot, dated forward quotes and a USD discount curve with
+  input references and a consistent valuation date. Perform construction and
+  validation in the agent without requiring a new backend curve endpoint.
+- [x] Resolve quote direction, forward points versus outrights, points scale,
+  spot settlement lag, calendars, business-day adjustments, maturity dates,
+  day-count conventions and discount-curve reference dates. Report missing data
+  and ask for ambiguous conventions before producing a validated curve.
+- [x] Build the FX-consistent EUR curve using the supplied USD discount curve
+  and forwards. Record the interpolation method and any extrapolation policy.
+- [x] Report forward outrights at every quoted maturity and interpolated forwards
+  at 2M, 4M and 9M. Label each result as quoted, interpolated or extrapolated;
+  an out-of-range target must not be presented as interpolation.
+- [x] Report repricing residuals against every market input with units and
+  predefined absolute/relative tolerances. Fix tolerances before construction;
+  show a per-quote pass/fail and an overall validation outcome.
+- [x] Retain the configuration and input references needed to reproduce the
+  curve. Test against independent reference values, including quote-direction,
+  points-scale, date and missing-input failures.
+
+Success requires reproducing the quoted forwards within the predefined
+tolerances, clearly identifying interpolated values, and reporting missing data
+or unresolved convention ambiguities. Do not label an incomplete or failing
+construction as validated.
+
+## 9. Build and validate an FX volatility surface
+
+Example: "Using the validated EUR/USD curves and supplied ATM, 10-delta and
+25-delta risk-reversal and butterfly quotes, construct and validate an FX
+volatility surface under explicit option conventions."
+
+Depends on the validated curves from task 8 and supplied volatility quotes;
+this task does not depend on a live volatility-data feed or executable quotes.
+
+- [x] Bind construction to the validated curve outputs, valuation date, spot
+  and supplied ATM, 10-delta and 25-delta risk-reversal/butterfly quotes by expiry.
+  Keep construction, convention handling and diagnostics in the agent.
+- [x] Resolve spot versus forward delta, premium adjustment and premium currency,
+  ATM definition, risk-reversal sign, butterfly/market-strangle definition,
+  volatility units, expiry/delivery dates and calendars. Record interpolation,
+  extrapolation and solver settings; report missing or ambiguous conventions.
+- [x] Construct the surface and report corresponding strikes and volatilities
+  for ATM and the 10-delta/25-delta call and put wings at each quoted expiry.
+- [x] Reconstruct the original ATM, risk-reversal and butterfly quotes under
+  the same conventions. Report quote-recovery errors, units, predefined
+  tolerances and per-quote/overall validation outcomes.
+- [x] Report applicable arbitrage diagnostics, including option-price bounds,
+  strike monotonicity/convexity and calendar consistency under the chosen
+  conventions. State the tested domain and checks that are unavailable or
+  inconclusive; finite-grid checks must not imply a global arbitrage guarantee.
+- [x] Flag extrapolation beyond quoted expiries or wings and disclose the
+  extrapolation policy for each affected result.
+- [x] Return curve and quote input references, configuration, implementation
+  version and numerical settings sufficient to reproduce the result. Clearly
+  distinguish supplied quotes, calibrated nodes, interpolated and extrapolated values.
+- [x] Verify quote recovery and strike/delta consistency against independent
+  references. Include ambiguous conventions, invalid/missing quotes, solver
+  failures and diagnostic failures in tests and evaluations.
+
+Success requires quote recovery within predefined tolerances, explicit option
+conventions, reported arbitrage diagnostics and extrapolation warnings, and
+reproducible configuration/input references. Surface construction alone must
+not be described as an executable bid/offer quote.
+
+## 10. Deferred queries with current capability blockers
 
 These remain requirements from the issue, but follow the booking/results work.
 The issue explicitly defers two-way pricing and funding/wash workflows.
 
 | Query | Agent task | Current blocker / completion evidence |
 | --- | --- | --- |
-| "What is the three-month EUR/USD volatility?" | Add a dated volatility read adapter when an existing source supports it. | No verified volatility source/tool. Require real observations with expiry, strike/delta convention, units and provider. |
+| "What is the three-month EUR/USD volatility?" | Add a dated live volatility read adapter when an existing source supports it; task 9 separately covers construction from supplied quotes. | No verified live volatility source/tool. Require real observations with expiry, strike/delta convention, units and provider. |
 | "Price 50M EUR/USD three-month 1.0800 call versus 1.0500 put risk reversal." | Extract and review RFQ terms; orchestrate existing pricing capabilities if available. | No verified two-way pricing/volatility capability. Stored NPV is not a bid/offer. |
 | "Give me a two-way market on a 20M EUR six-month EUR/USD forward." | Reuse reviewed terms and pricing evidence in an agent RFQ flow. | No current quote tool. A quote needs verified sides, units, pricing basis and validity before acceptance/booking. |
 | "Quote a USD SOFR swap, Apple bond, CDX/Boeing CDS, SPX collar or NVDA call." | Add product-specific RFQ handling after pricing prerequisites are established. | Verify each product independently; a mock demonstrates integration only and must be labelled. |

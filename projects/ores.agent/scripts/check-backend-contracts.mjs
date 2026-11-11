@@ -7,6 +7,9 @@ import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { decode } from '@msgpack/msgpack';
 import { NatsBackend, subjects, backendContractRevision } from '../dist/backend.js';
+import { bookForwardRequest, forwardTerms } from '../dist/booking-wire.js';
+import { TradeBookings } from '../dist/trade-bookings.js';
+import { swapChildReads, swapPage, swapTerms } from '../dist/swap-booking.js';
 
 const component = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const root = resolve(component, '../..');
@@ -65,6 +68,8 @@ function sourceHashes(ops) {
         }
     }
     for (const op of Object.values(ops)) visit(op.path);
+    if (ops.runDocument)
+        visit(join(root, 'projects/ores.reporting/api/src/messaging/run_document_protocol_codec.cpp'));
     for (const path of [
         'projects/ores.utility/include/ores.utility/codec/struct_codec.hpp',
         'projects/ores.nats/include/ores.nats/domain/wire_codec.hpp',
@@ -94,6 +99,8 @@ async function verify(probePath) {
     const { fixtureBackend, fixtureSession, fixtureIds } = await import('../evals/fixtures.mjs');
     const { evaluateCase } = await import('../evals/engine.mjs');
     const { encode } = await import('@msgpack/msgpack');
+    const { bookingBackend } = await import('../tests/forward-booking-fixture.mjs');
+    const { swapBackend, swapBookingTerms } = await import('../tests/product-booking-fixture.mjs');
     const seen = new Set();
     const sourceSha256 = digest(sourceHashes(operations()));
     let legacyEnumRows = 0;
@@ -150,6 +157,16 @@ async function verify(probePath) {
         filter: null,
         as_of: null,
     };
+    const fxTerms = forwardTerms.parse({
+        bookId: fixtureIds.book,
+        counterpartyId: id,
+        tradeDate: '2026-11-06',
+        instrument: {
+            bought_currency: 'EUR', bought_amount: '20000000',
+            sold_currency: 'USD', sold_amount: '21670000',
+            value_date: '2027-05-13', settlement: 'Physical',
+        },
+    });
     const special = {
         login: { principal: 'fixture', password: 'fixture' },
         logout: {},
@@ -157,17 +174,50 @@ async function verify(probePath) {
         observations: { ...page, series_id: id, scope: 'direct' },
         tradePortfolios: { ...page, trade_id: id, scope: 'direct' },
         trade: { key: { id } },
+        bookTrade: bookForwardRequest(fxTerms, id, fixtureIds.party, '2026-11-06T00:00:00Z'),
         tradeBooking: { key: { trade_id: id } },
+        tradeState: { key: { trade_id: id } },
+        tradeStatusNames: { ...page, filter: { id_one_of: [id] } },
         fxForward: { key: { trade_id: id } },
         bond: { key: { trade_id: id } },
+        bondIssue: { key: { issue_id: id } },
+        swapHeader: { key: { trade_id: id } },
+        ...Object.fromEntries(Object.keys(swapChildReads).map(op => [op, swapPage(id)])),
         counterparty: { key: { short_code: 'FIXTURE' } },
         exportPortfolio: { node_id: fixtureIds.portfolio, offset: 0, limit: 2 },
         runHealth: { report_instance_id: fixtureIds.run },
+        runHealthBatch: {instance_ids:[fixtureIds.run]},
+        runDocument: { report_definition_id: fixtureIds.definition },
+        triggerReport: {
+            report_definition_id: fixtureIds.definition,
+            tenant_id: fixtureIds.tenant,
+            job_instance_id: 0,
+            kind: 'production',
+            covered_date: '',
+            scope_code: '',
+            business_centre_code: '',
+        },
     };
     for (const op of Object.keys(subjects)) {
         const payload = special[op] ?? page;
         // Responses use server-defined defaults here; replay below checks meaningful rows.
         roundtrip(op, encode(payload), {});
+    }
+    const bookingSession = fixtureSession();
+    for (const [booking, terms] of [[bookingBackend(), fxTerms], [swapBackend(), swapTerms.parse(swapBookingTerms)]]) {
+        const bookingAdapter = new NatsBackend({
+            status: async function* () {},
+            request: async (subject, data) => {
+                const op = Object.keys(subjects).find(key => subject === 'fixture.' + subjects[key]);
+                const result = await booking.backend.request(op, decode(data), bookingSession);
+                return { data: roundtrip(op, data, result) };
+            },
+        }, 'fixture');
+        const booked = await new TradeBookings(bookingAdapter).submit(
+            { token: id, draftId: id, revision: 1, terms }, bookingSession, new AbortController().signal,
+        );
+        assert.equal(booked.evidence[0].status, 'booked', booked.answer);
+        assert.equal(booking.writes.length, 1);
     }
     let cases = 0;
     for (const file of ['cases.json', 'holdout-stage5.json', 'review-v2.json']) {

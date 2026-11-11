@@ -1,0 +1,149 @@
+{
+  "version": "report-run-discovery-1.0.0",
+  "cases": [
+    {
+      "id": "risk-rate-reference",
+      "group": "reporting",
+      "intent": "read independent ORE Delta Gamma and signed DV01",
+      "profiles": ["replay", "model"],
+      "turns": [{
+        "message": "Show Delta, Gamma and DV01 for book Fixture FX Book from run 11111111-1111-4111-8111-000000000007 on 2026-11-06 for factor DiscountCurve/EUR/6/10Y.",
+        "replay": [{"content":"The agent selects all explicitly requested views."}],
+        "expect": {"tool":"summarize_scope_results","statuses":["ok"],"contains":["DV01 (stored Delta)","-485.04 EUR","1.84 EUR"],
+          "checks":[{"path":"bucketCount","equals":3},{"path":"buckets.1.requestedMeasure","equals":"dv01"},{"path":"buckets.1.shift","equals":"0.0001"}]}
+      }, {
+        "message":"Show Delta and Gamma for this book from run 11111111-1111-4111-8111-000000000007 on 2026-11-06.",
+        "replay":[{"content":"Show the accessible books for selection."}],
+        "expect":{"tool":"find_books","selectionRequired":"scope","contains":["Fixture FX Book"]}
+      }, {
+        "message":"Use option 1.",
+        "replay":[{"content":"Use the selected book and requested measures."}],
+        "expect":{"tool":"summarize_scope_results","statuses":["ok"],"contains":["Next buckets"],"checks":[{"path":"bucketCount","equals":8},{"path":"nextBucketOffset","equals":5}]}
+      }, {
+        "message":"Next buckets.",
+        "replay":[{"content":"Advance the bucket page on the same book and run."}],
+        "expect":{"tool":"summarize_scope_results","statuses":["ok"],"checks":[{"path":"bucketOffset","equals":5},{"path":"nextBucketOffset","equals":null}]}
+      }]
+    },
+    {
+      "id": "risk-fx-volatility-reference",
+      "group": "reporting",
+      "intent": "select an FX volatility factor and page its trade contributions",
+      "profiles": ["replay", "model"],
+      "turns": [
+        {
+          "message": "Show EUR/USD three-month vega with top 1 contributor for portfolio Fixture Treasury from run 11111111-1111-4111-8111-000000000007 on 2026-11-06.",
+          "replay": [{"content":"Two reported smile points need a choice."}],
+          "expect":{"tool":"summarize_scope_results","statuses":["selection_required"],"selectionRequired":"factor","contains":["FXVolatility/EURUSD/134/3M/ATM"],"noFigures":true}
+        },
+        {
+          "message": "Use option 2.",
+          "replay": [{"content":"Select the exact stored ATM factor."}],
+          "expect":{"tool":"summarize_scope_results","statuses":["ok"],"contains":["Vega (stored Delta)","3.16 EUR"],"checks":[{"path":"buckets.0.shift","equals":"0.000082"},{"path":"buckets.0.contributors.0.figure","equals":"2.03"}]}
+        },
+        {
+          "message": "Next contributors for bucket 1.",
+          "replay": [{"content":"Keep the bucket and report fixed while advancing the contributor offset."}],
+          "expect":{"tool":"summarize_scope_results","statuses":["ok"],"contains":["3.16 EUR"],"checks":[{"path":"buckets.0.factor","equals":"FXVolatility/EURUSD/134/3M/ATM"},{"path":"buckets.0.contributors.0.figure","equals":"1.13"},{"path":"buckets.0.nextOffset","equals":null}]}
+        }
+      ]
+    },
+    {
+      "id": "trade-base-npv-explicit-qualifier",
+      "group": "reporting",
+      "intent": "read base NPV with verified stored currency",
+      "profiles": ["replay", "model"],
+      "turns": [{
+        "message": "What is the base NPV of trade 11111111-1111-4111-8111-000000000005 from run 11111111-1111-4111-8111-000000000007 on 2026-11-06?",
+        "replay": [{"tool":"read_trade_results","arguments":{}}],
+        "expect": {"tool":"read_trade_results","statuses":["ok"],"contains":["0.1 GBP","npv.csv"],"checks":[{"path":"currencyBasis","equals":"typed_metric.BaseCurrency"}]}
+      }]
+    },
+    {
+      "id": "latest-complete-npv-portfolio-choice",
+      "group": "reporting",
+      "intent": "choose portfolio and verify the newest scoped run",
+      "profiles": ["replay", "model"],
+      "turns": [
+        {
+          "message": "Show the latest complete NPV for my portfolio and its contributors.",
+          "replay": [{"content":"The agent offers the visible portfolios."}],
+          "expect": {"tool":"find_portfolios","selectionRequired":"scope","contains":["Fixture Treasury"],"noFigures":true}
+        },
+        {
+          "message": "Use option 1.",
+          "replay": [{"content":"The agent follows the selected portfolio."}],
+          "expect": {"tool":"summarize_scope_results","statuses":["ok","stale"],"contains":["latest verified clean run","0.3 GBP","Contributors"],"checks":[{"path":"selectedLatest","equals":true},{"path":"coverage.expectedTradeCount","equals":2}]}
+        }
+      ]
+    },
+    {
+      "id": "report-runs-review-with-scoped-results",
+      "group": "reporting",
+      "intent": "review report and follow scoped results",
+      "profiles": ["replay", "model"],
+      "turns": [{
+        "message": "Run the NPV report using definition Fixture NPV on 2026-11-06, then show results for book Fixture FX Book.",
+        "replay": [{"content": "The agent validates the saved definition and the results scope."}],
+        "expect": {"tool": "review_npv_run", "statuses": ["confirmation_required"], "contains": ["configured scope", "Confirm NPV run"], "checks": [{"path": "resultScope.id", "equals": "11111111-1111-4111-8111-000000000003"}]}
+      }]
+    },
+    {
+      "id": "report-runs-book-override-unverified",
+      "group": "reporting",
+      "intent": "distinguish report execution scope from results scope",
+      "profiles": ["replay", "model"],
+      "turns": [{
+        "message": "Run the NPV report for book Fixture FX Book at 2026-11-06, then show the results.",
+        "replay": [{"content": "The agent resolves the book and checks what the trigger supports."}],
+        "expect": {"tool": "review_npv_run", "statuses": ["execution_scope_unverified"], "contains": ["configured execution scope", "Fixture FX Book"]}
+      }]
+    },
+    {
+      "id": "report-runs-npv-review",
+      "group": "reporting",
+      "intent": "report-runs-npv-review",
+      "scenario": "default",
+      "profiles": ["replay", "model"],
+      "capability": {"status": "available"},
+      "turns": [
+        {
+          "message": "Run a new NPV report.",
+          "replay": [{"content": "The agent reads report definitions directly."}],
+          "expect": {"tool": "review_npv_run", "statuses": ["definition_required"], "contains": ["Fixture NPV"]}
+        },
+        {
+          "message": "Run NPV report using definition \"Fixture NPV\" on 2026-11-06.",
+          "replay": [{"content": "The agent reviews the configuration directly."}],
+          "expect": {"tool": "review_npv_run", "statuses": ["confirmation_required"], "contains": ["Confirm NPV run", "2026-11-06"], "checks": [{"path":"baseCurrency","equals":"GBP"}]}
+        }
+      ]
+    },
+    {
+      "id": "report-runs-latest-completed",
+      "group": "reporting",
+      "intent": "report-runs-latest-completed",
+      "scenario": "default",
+      "profiles": ["replay", "model"],
+      "capability": {"status": "available"},
+      "turns": [{
+        "message": "List the latest completed report runs.",
+        "replay": [{"tool": "find_report_runs", "arguments": {"status": "completed"}}],
+        "expect": {"tool": "find_report_runs", "statuses": ["ok"], "arguments": {"status": "completed"}, "checks": [{"path": "rows.0.id", "equals": "11111111-1111-4111-8111-000000000007"}, {"path": "rows.0.health", "equals": "completed clean"}], "contains": ["stored runs", "completed"]}
+      }]
+    },
+    {
+      "id": "report-runs-list-existing",
+      "group": "reporting",
+      "intent": "report-runs-list-existing",
+      "scenario": "default",
+      "profiles": ["replay", "model"],
+      "capability": {"status": "available"},
+      "turns": [{
+        "message": "List existing report runs.",
+        "replay": [{"tool": "find_report_runs", "arguments": {}}],
+        "expect": {"tool": "find_report_runs", "statuses": ["ok"], "checks": [{"path": "totalMatches", "equals": 1}, {"path": "rows.0.id", "equals": "11111111-1111-4111-8111-000000000007"}], "contains": ["stored runs"]}
+      }]
+    }
+  ]
+}

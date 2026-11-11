@@ -17,6 +17,21 @@ Replace IDs with stored record IDs. Replies support Markdown headings, tables,
 lists and code blocks. Raw HTML and images are disabled. Open **OreStudio tool
 evidence** to inspect source data. Model text can be wrong.
 
+## OreStudio help
+
+Ask “How do I create a book in OreStudio?” or “Where can I download report
+results?” Use “in the shell” or “in the web app” to specify the interface.
+The `search_help` tool searches curated passages bundled with the agent and
+returns matching excerpts, source links and the agent release. A direct
+match needs no inference. The model can retry an unmatched question once
+with a shorter query. Help lookup makes no calls to OreStudio business
+services or to public search providers. The initial corpus covers web sign-in,
+book and portfolio setup, web report runs and results, and shell book and
+portfolio commands.
+
+The curated sections live in `src/help.ts`. When a workflow changes, update its
+passage and source link and rebuild the agent to publish the new guidance.
+
 The agent does not book trades, start reports or issue executable quotes.
 Scope totals are client-derived analysis, not a server summary API.
 
@@ -108,7 +123,7 @@ The tool deadline is 30 seconds. Independent reference/smoke scripts remain in
 
 For MCP, sign in through `POST /auth/login` using `principal`, `password` and
 optional `partyId`. Send the returned `accessToken` as `Authorization: Bearer <TOKEN>`
-on every `/mcp` exchange. Sign out through `POST /auth/logout`. The 14 read tools
+on every `/mcp` exchange. Sign out through `POST /auth/logout`. The read tools
 need no model when called through MCP. Backend tokens and NATS keys stay server-side.
 An MCP session ID is not a credential. Supported protocol revisions are
 2026-07-28 and 2025-11-25. This local profile has no OAuth discovery/enrollment.

@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import type { Config } from './config.js';
 
 // Audit reference, not a server version lock. CI checks backend-contract.json for drift.
-export const backendContractRevision = 'f19210e781dd508c1019f499a74ecd40d59912e3';
+export const backendContractRevision = 'b00f9113c1a5485711161f564de909b5eb07bebc';
 export const subjects = {
     login: 'iam.v1.ops.login',
     logout: 'iam.v1.ops.logout',
@@ -23,15 +23,27 @@ export const subjects = {
     reportInstances: 'reporting.v1.report_instances.list',
     runResults: 'reporting.v1.run_results.list',
     runHealth: 'reporting.v1.ops.get_run_health',
+    runHealthBatch: 'reporting.v1.ops.get_report_instance_health',
+    runDocument: 'reporting.v1.run_documents.get',
+    triggerReport: 'reporting.v1.ops.trigger_report_instance',
     reportMetrics: 'reporting.v1.report_metrics.list',
     counterparties: 'refdata.v1.counterparties.list',
     trade: 'trading.v1.trades.get',
+    bookTrade: 'trading.v1.ops.book_trade',
     tradeBooking: 'trading.v1.trade_bookings.get',
+    tradeState: 'trading.v1.trade_states.get',
+    tradeStatusNames: 'dq.v1.fsm_states.list',
     tradePortfolios: 'trading.v1.trade_portfolios.list_by_trade_id',
     tradeBookings: 'trading.v1.trade_bookings.list',
     exportPortfolio: 'trading.v1.ops.export_portfolio',
     fxForward: 'trading.v1.fx_forward_instruments.get',
     bond: 'trading.v1.bond_instruments.get',
+    bondIssue: 'trading.v1.bond_issues.get',
+    swapHeader: 'trading.v1.rate_instruments.get',
+    swapLegs: 'trading.v1.swap_legs.list_by_trade_id',
+    swapAmounts: 'trading.v1.swap_leg_amounts.list_by_trade_id',
+    swapRates: 'trading.v1.swap_leg_rates.list_by_trade_id',
+    swapSchedules: 'trading.v1.instrument_schedules.list_by_trade_id',
     counterparty: 'refdata.v1.counterparties.get',
 } as const;
 export type Operation = keyof typeof subjects;
@@ -137,7 +149,7 @@ export class NatsBackend implements Backend {
             h.set('Nats-Session-Id', identity.sessionId);
         }
         try {
-            // Core NATS read request: finite deadline, no mutation retries, no subscriptions.
+            // One Core NATS request with a finite deadline.
             const reply = await this.nc.request(
                 `${this.prefix}.${subjects[operation]}`,
                 encode(payload, { ignoreUndefined: true }),

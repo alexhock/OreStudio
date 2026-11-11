@@ -15,7 +15,12 @@ export interface ToolCall {
     function: { name: string; arguments: string };
 }
 export interface Inference {
-    complete(messages: Message[], tools: unknown[], signal: AbortSignal): Promise<Message>;
+    complete(
+        messages: Message[],
+        tools: unknown[],
+        signal: AbortSignal,
+        options?: { tool?: string; disableThinking?: boolean },
+    ): Promise<Message>;
 }
 const messageSchema = z.object({
     role: z.literal('assistant'),
@@ -33,7 +38,12 @@ const messageSchema = z.object({
 });
 export class HttpInference implements Inference {
     constructor(private config: Config['inference']) {}
-    async complete(messages: Message[], tools: unknown[], signal: AbortSignal): Promise<Message> {
+    async complete(
+        messages: Message[],
+        tools: unknown[],
+        signal: AbortSignal,
+        options?: { tool?: string; disableThinking?: boolean },
+    ): Promise<Message> {
         const key = this.config.apiKeyFile
             ? (await readFile(this.config.apiKeyFile, 'utf8')).trim()
             : undefined;
@@ -52,9 +62,16 @@ export class HttpInference implements Inference {
                         model: this.config.model,
                         messages,
                         tools,
-                        tool_choice: 'auto',
+                        tool_choice: options?.tool
+                            ? { type: 'function', function: { name: options.tool } }
+                            : options
+                              ? 'required'
+                              : 'auto',
+                        ...(options?.disableThinking
+                            ? { chat_template_kwargs: { enable_thinking: false } }
+                            : {}),
                         parallel_tool_calls: false,
-                        temperature: 0.1,
+                        temperature: options ? 0 : 0.1,
                         top_k: 50,
                         repeat_penalty: 1.1,
                         max_tokens: this.config.maxOutputTokens ?? 2048,

@@ -27,6 +27,17 @@ test('a proposed UUID must agree with the option mentioned in the reply', async 
     assert.equal(two.action, 'clarify');
 });
 
+test('a UUID proposed for a named provider preserves the provider selection', async () => {
+    const anotherBloombergSeries = { ...candidates[1], seriesId: '11111111-1111-4111-8111-000000000003' };
+    const pending = { ...choice, candidates: [...candidates, anotherBloombergSeries] };
+    const model = proposes({ action: 'select', updates: [{ field: 'seriesId', text: candidates[1].seriesId }] });
+    const result = await interpretMarketPoint(model, pending, [], 'Please go with Bloomberg for that one.', signal);
+    assert.deepEqual(result, { action: 'update', args: { ...choice.args, provider: 'bloomberg' } });
+
+    const wrongProvider = proposes({ action: 'select', selection: candidates[0].seriesId });
+    assert.equal((await interpretMarketPoint(wrongProvider, pending, [], 'Please go with Bloomberg for that one.', signal)).action, 'clarify');
+});
+
 test('an option and an explicit new date can be selected together', async () => {
     const model = proposes({ action: 'select', selection: candidates[1].seriesId });
     const result = await interpretMarketPoint(model, choice, [], 'The second one on 2026-11-05, please.', signal);

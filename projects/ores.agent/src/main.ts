@@ -10,7 +10,8 @@ if (!path)
     throw new Error('Pass --config <path> or ORES_AGENT_CONFIG. OreStudio .env is never loaded.');
 const config = await loadConfig(path);
 const backend = config.nats ? await NatsBackend.open(config.nats) : undefined;
-const server = createApp(config, backend, join(dirname(resolve(path)), 'npv-submissions'));
+const stateDir = process.env.ORES_AGENT_STATE_DIR ?? dirname(resolve(path));
+const server = createApp(config, backend, join(stateDir, 'npv-submissions'));
 server.listen(config.port, config.host, () =>
     console.log(JSON.stringify({ event: 'listening', address: server.address() })),
 );

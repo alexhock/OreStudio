@@ -26,8 +26,10 @@ export async function loadFxDataset({
     systemRequest,
     tenantRequest,
     apply = false,
+    dataset = fxDataset(tenantId, partyId),
 }) {
-    const dataset = fxDataset(tenantId, partyId);
+    if (dataset.tenantId !== tenantId || dataset.partyId !== partyId)
+        throw Error('Dataset owner does not match the selected test identity.');
     const resources = [
         {
             kind: 'provider',

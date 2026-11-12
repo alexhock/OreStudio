@@ -4,6 +4,51 @@ Agent, inference and existing OreStudio services have separate lifecycles.
 Keep runtime roots outside the checkout. Run checkout commands from
 `projects/ores.agent`. Node 22.11+ is required.
 
+## Linux containers
+
+Use Docker Compose with a Linux engine for local deployments, including Docker
+Desktop on Windows. Start with a running OreStudio NATS broker reachable from
+the agent container.
+
+1. Copy [the container config](../config.container.example.json) to
+   `agent.json` in a private runtime directory. Set the NATS address and
+   subject prefix for the target environment. The sample uses the Windows host
+   gateway and verifies the broker certificate against `localhost`. Set
+   `tlsServerName` to the broker certificate's DNS name when it differs from the
+   address in `server`.
+2. Place the NATS CA, client certificate and client key under `nats/` in that
+   directory, using the filenames from the sample. Put a shared inference
+   API key on one line in `llama-api-key`. Give container UID 1000 read access
+   to the mounted files and restrict access to the keys on the host.
+3. Set `ORES_AGENT_RUNTIME` to the runtime directory and
+   `ORES_LLAMA_MODEL_FILE` to the GGUF pinned in [inference-lock.json](../inference-lock.json).
+   The existing inference installer can fetch and verify that file.
+
+```text
+docker compose up --build --wait
+docker compose logs agent llama
+docker compose down
+```
+
+Open `http://127.0.0.1:20100`. `/healthz` checks the agent process and
+`/readyz` checks its NATS connection. To use a different host port, set
+`ORES_AGENT_PORT` and update `allowedOrigins` in `agent.json`. Inference stays
+on a private network. Compose preserves the agent's report-submission state
+in a named volume. Chat sessions and booking drafts expire on restart.
+
+On a Docker host with NVIDIA GPU support, set `ORES_LLAMA_GPU_LAYERS=99` and
+run `docker compose -f compose.yaml -f compose.cuda.yaml up --build --wait`.
+
+For a Linux host using Podman, build the same agent image with
+`podman build -t localhost/ores-agent:local .` and install the files in
+[deploy/quadlet](../deploy/quadlet) in the user's
+`~/.config/containers/systemd/`. Use `~/.config/ores-agent/` for the runtime
+files and place the GGUF under `models/`. Set the NATS address to one reachable
+from Podman, such as the host gateway `host.containers.internal` where
+available. Run `systemctl --user daemon-reload` and
+`systemctl --user start ores-agent.service`. The agent unit starts llama.cpp
+and waits for the model health check.
+
 ## Agent package
 
 ```text

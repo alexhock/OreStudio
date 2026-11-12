@@ -31,6 +31,18 @@ test('corrections use supported user evidence, preserving other selections',asyn
     assert.equal(r.args.spotDate,'2017-01-03');assert.equal(r.args.provider,'agent-e2e');
 });
 
+test('explicit convention clauses preserve the request and reject conflicting values', async () => {
+    const inference = { complete: async () => assert.fail('Explicit clauses are validated directly') };
+    const read = message => interpretFxFollowup(inference, choice, [], message, signal());
+    const result = await read('Spot settlement date 2017-01-03; forward quotes are outrights; unadjusted dates; no end-of-month rolling; USD tenors use valuation date.');
+    assert.deepEqual(result, { action: 'update', args: {
+        ...choice.args, spotDate: '2017-01-03', forwardQuote: 'outright',
+        calendar: 'unadjusted', endOfMonth: false, usdPillarAnchor: 'valuation',
+    } });
+    assert.equal((await read('Forward quotes are outrights; forward quotes are points.')).action, 'clarify');
+    assert.equal((await read('Spot date 2017-02-31.')).action, 'clarify');
+});
+
 test('unquoted model echoes and placeholders cannot overwrite explicit selections',async()=>{
     const r=await interpret(call('update_fx_selection',{selections:[
         {field:'asOf',value:'2026-01-01',quote:'2026-01-01'},

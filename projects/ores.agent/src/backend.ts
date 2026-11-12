@@ -122,7 +122,12 @@ export class NatsBackend implements Backend {
         const nc = await connect({
             servers: config.server,
             name: 'ores.agent',
-            tls: { ca, cert, key },
+            tls: {
+                ca,
+                cert,
+                key,
+                ...(config.tlsServerName ? { servername: config.tlsServerName } : {}),
+            },
             timeout: 5000,
             reconnect: true,
             maxReconnectAttempts: -1,

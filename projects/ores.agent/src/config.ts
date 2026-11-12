@@ -22,16 +22,11 @@ const origin = z.string().refine((value) => {
     const url = httpUrl(value);
     return url !== undefined && value === url.origin;
 }, 'Use an HTTP(S) origin with no path, credentials, query or fragment.');
-const inferenceUrl = z.string().refine((value) => {
-    const url = httpUrl(value);
-    return (
-        url !== undefined &&
-        (url.protocol === 'https:' || ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname))
-    );
-}, 'Use loopback HTTP or HTTPS with no credentials, query or fragment.');
+const loopback = ['127.0.0.1', 'localhost', '[::1]'];
 const configSchema = z
     .object({
-        host: z.enum(['127.0.0.1', '::1']),
+        deployment: z.literal('container').optional(),
+        host: z.enum(['127.0.0.1', '::1', '0.0.0.0']),
         port: z.number().int().min(0).max(65535),
         allowedOrigins: z.array(origin),
         nats: z
@@ -41,12 +36,13 @@ const configSchema = z
                 ca: z.string().min(1),
                 cert: z.string().min(1),
                 key: z.string().min(1),
+                tlsServerName: z.hostname().optional(),
             })
             .strict()
             .nullable(),
         inference: z
             .object({
-                baseUrl: inferenceUrl,
+                baseUrl: z.string(),
                 model: z.string().min(1),
                 timeoutMs: z.number().int().min(100).max(120000),
                 apiKeyFile: z.string().min(1).optional(),
@@ -54,7 +50,29 @@ const configSchema = z
             })
             .strict(),
     })
-    .strict();
+    .strict()
+    .superRefine((config, ctx) => {
+        const container = config.deployment === 'container';
+        if (config.host === '0.0.0.0' && !container)
+            ctx.addIssue({
+                code: 'custom',
+                path: ['host'],
+                message: 'Use a loopback bind address.',
+            });
+        const url = httpUrl(config.inference.baseUrl);
+        if (
+            !url ||
+            (url.protocol !== 'https:' &&
+                !loopback.includes(url.hostname) &&
+                !(container && url.hostname === 'llama'))
+        )
+            ctx.addIssue({
+                code: 'custom',
+                path: ['inference', 'baseUrl'],
+                message:
+                    'Use HTTPS, loopback HTTP, or the private llama service in container mode.',
+            });
+    });
 export type Config = z.infer<typeof configSchema>;
 
 export function validateConfig(raw: unknown): Config {

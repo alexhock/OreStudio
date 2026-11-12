@@ -96,22 +96,13 @@ const proposal = z
             .max(fieldNames.length),
     })
     .strict();
-const extract = {
-    type: 'function',
-    function: {
-        name: 'interpret_fx_forward_draft',
-        description:
-            'Interpret edits to an unsaved FX-forward booking draft. Each text value must be an exact excerpt from the latest user message.',
-        parameters: z.toJSONSchema(proposal),
-    },
-};
 function productExtractor(product: Product, fields: Field[]) {
-    if (product === 'forward') return extract;
     return {
         type: 'function',
         function: {
-            name: `interpret_${product}_draft`,
-            description: 'Extract literal terms and directions for the booking draft.',
+            name:
+                product === 'forward' ? 'interpret_fx_forward_draft' : `interpret_${product}_draft`,
+            description: 'Extract literal terms and directions for the unsaved booking draft.',
             parameters: z.toJSONSchema(
                 proposal.extend({
                     fields: z
@@ -188,8 +179,9 @@ function normalize(field: Field, text: string): string | undefined {
         case 'settlementDate':
             return z.iso.date().safeParse(value).success ? value : undefined;
         case 'settlement':
-            if (/^(physical|deliverable)$/i.test(value)) return 'physical';
-            if (/^(cash(?:[- ]settled)?|ndf|non[- ]deliverable)$/i.test(value)) return 'cash';
+            if (/^(?:physical|deliverable)(?:\s+settlement)?$/i.test(value)) return 'physical';
+            if (/^(?:cash(?:[- ]settled)?|ndf|non[- ]deliverable)(?:\s+settlement)?$/i.test(value))
+                return 'cash';
             return;
         case 'settlementCurrency':
             return /^[a-z]{3}$/i.test(value) ? value.toUpperCase() : undefined;
@@ -272,6 +264,25 @@ function literal(message: string, text: string, field: Field) {
             return true;
     }
     return false;
+}
+
+function forwardSelections(fields: z.infer<typeof proposal>['fields'], message: string) {
+    return fields.flatMap((item) => {
+        if (item.field !== 'baseAmount' && item.field !== 'notional' && item.field !== 'pair')
+            return [item];
+        // Some models copy an amount and its immediately following pair as one span.
+        const compound = /^(.+?)\s+([a-z]{3}\s*\/\s*[a-z]{3})$/i.exec(item.text.trim());
+        if (
+            !compound ||
+            !normalize('baseAmount', compound[1]!) ||
+            !literal(message, item.text, item.field)
+        )
+            return [item];
+        return [
+            { field: 'baseAmount' as const, text: compound[1]! },
+            { field: 'pair' as const, text: compound[2]! },
+        ];
+    });
 }
 const lookupReply = z.object({
     searchComplete: z.boolean(),
@@ -475,8 +486,12 @@ export class BookingDrafts {
         const usesShorthand = product === 'forward' && shorthandSide.test(message);
         const changed = new Set<Field>();
         if (proposed?.action === 'update') {
+            const proposedFields =
+                product === 'forward'
+                    ? forwardSelections(proposed.fields, message)
+                    : proposed.fields;
             for (const field of draftFields) {
-                const selections = proposed.fields.filter(
+                const selections = proposedFields.filter(
                     (item) => item.field === field && literal(message, item.text, field),
                 );
                 if (!selections.length) continue;

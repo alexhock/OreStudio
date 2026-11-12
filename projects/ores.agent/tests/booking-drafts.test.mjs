@@ -5,7 +5,8 @@ import { createServer } from 'node:http';
 import test from 'node:test';
 import { Script } from 'node:vm';
 import { createApp } from '../dist/server.js';
-import { id } from '../evals/fixtures.mjs';
+import { BookingDrafts } from '../dist/booking-drafts.js';
+import { fixtureSession, id } from '../evals/fixtures.mjs';
 import { bookingDraftFixtureBackend } from '../evals/booking-draft-fixtures.mjs';
 import { bookingBackend } from './forward-booking-fixture.mjs';
 
@@ -15,6 +16,43 @@ async function listen(t, server) {
     await once(server, 'listening');
     return 'http://127.0.0.1:' + server.address().port;
 }
+
+test('chat retains a combined amount and pair and accepts a full settlement label', async () => {
+    const proposals = [
+        [
+            { field: 'side', text: 'buy' },
+            { field: 'notional', text: '20M EUR/USD' },
+            { field: 'book', text: 'Fixture FX Book' },
+            { field: 'counterparty', text: 'FIX-A' },
+        ],
+        [
+            { field: 'tradeDate', text: '2026-11-11' },
+            { field: 'valueDate', text: '2027-05-13' },
+            { field: 'settlement', text: 'physical settlement' },
+            { field: 'rate', text: '1.0835' },
+        ],
+    ];
+    const draft = new BookingDrafts({
+        complete: async () => ({
+            tool_calls: [{ function: { name: 'interpret_fx_forward_draft',
+                arguments: JSON.stringify({ action: 'update', fields: proposals.shift() }) } }],
+        }),
+    }, {
+        execute: async (name, { query }) => ({
+            searchComplete: true, totalMatches: 1,
+            rows: [{ id: name === 'find_books' ? id(50) : id(60), name: query }],
+        }),
+    });
+    const session = fixtureSession();
+    const signal = new AbortController().signal;
+    const opening = await draft.handle('Draft a buy of 20M EUR/USD forward with FIX-A in book "Fixture FX Book".', session, signal);
+    assert.equal(opening.draft.fields.baseAmount, '20000000');
+    assert.equal(opening.draft.fields.pair, 'EUR/USD');
+    const review = await draft.handle('Trade date 2026-11-11, agreed value date 2027-05-13, physical settlement, agreed rate 1.0835.', session, signal);
+    assert.equal(review.draft.id, opening.draft.id);
+    assert.equal(review.draft.fields.settlement, 'physical');
+    assert.equal(review.draft.ready, true);
+});
 
 test('authenticated draft review validates edits and rejects stale or other-session revisions', async t => {
     const model = await listen(t, createServer(async (req, res) => {

@@ -167,16 +167,19 @@ function groundedSelection(
         : result.updates
               .filter(({ field }) => field === 'provider' || field === 'seriesId')
               .map(({ text }) => text);
-    const selected = choice.candidates.find((candidate) => candidate.seriesId === match.seriesId);
+    const providerOf = (selection: ToolArguments) =>
+        selection.provider ??
+        choice.candidates.find((candidate) => candidate.seriesId === selection.seriesId)?.provider;
+    const provider = providerOf(match);
     if (
         proposed.length &&
         proposed.every((value) => {
             const target = select(choice, value, true);
-            return (
-                target &&
-                (JSON.stringify(target) === JSON.stringify(match) ||
-                    Boolean(selected && target.provider === selected.provider))
-            );
+            if (!target) return false;
+            // A provider reply may be represented by a candidate UUID in the model output.
+            // Keep the user's provider selector so a provider with several series remains ambiguous.
+            if (target.seriesId && match.seriesId) return target.seriesId === match.seriesId;
+            return provider !== undefined && provider === providerOf(target);
         })
     )
         return match;

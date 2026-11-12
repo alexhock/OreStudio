@@ -21,3 +21,13 @@ test('reject malformed and remotely bound configurations', () => {
     assert.throws(() => validateConfig({ ...config, inference: { ...config.inference, baseUrl: 'http://remote.invalid/v1' } }));
     assert.throws(() => validateConfig({ ...config, inference: { ...config.inference, baseUrl: 'https://user:secret@remote.invalid/v1' } }));
 });
+
+test('container config opts in to the container bind and private inference service', () => {
+    const inference = { ...config.inference, baseUrl: 'http://llama:8080/v1' };
+    assert.throws(() => validateConfig({ ...config, inference }));
+    const container = { ...config, deployment: 'container', host: '0.0.0.0', inference };
+    assert.deepEqual(validateConfig(container), container);
+    for (const baseUrl of ['http://llama.example/v1', 'http://user@llama/v1', 'http://llama/v1?key=x']) {
+        assert.throws(() => validateConfig({ ...container, inference: { ...inference, baseUrl } }));
+    }
+});

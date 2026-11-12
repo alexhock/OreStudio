@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Agent } from '../dist/agent.js';
-import { ToolExecutor } from '../dist/tools.js';
+import { ToolExecutor, tools } from '../dist/tools.js';
+import { catalogue } from '../dist/catalogue.js';
 import { version } from '../dist/version.js';
 
 const session = () => ({
@@ -16,6 +17,40 @@ const signal = new AbortController().signal;
 const executor = new ToolExecutor({
     request: async () => assert.fail('Help must not query business data'),
 }, () => {});
+
+test('model-selected tool inspection returns the full registry and exact schemas', async () => {
+    const ask = (message, args) => new Agent({
+        complete: async (messages, visible) => {
+            assert.equal(messages.at(-1).content, message);
+            assert.ok(!visible.some(t => t.function.name === 'search_help'));
+            const inspector = visible.find(t => t.function.name === 'inspect_tools');
+            assert.ok(inspector);
+            return { role: 'assistant', content: null, tool_calls: [{
+                id: 'inspection', type: 'function',
+                function: { name: inspector.function.name, arguments: JSON.stringify(args) },
+            }] };
+        },
+    }, executor).chat({ message }, session(), signal);
+    const listed = await ask('list all tools', {});
+    const names = [...listed.answer.matchAll(/^- `(\w+)`$/gm)].map(match => match[1]);
+    assert.deepEqual(names, [...Object.keys(tools), 'inspect_tools']);
+    const definition = await ask("what's the funciton definition of search_help", { name: 'search_help' });
+    assert.match(definition.answer, /`search_help` is available/);
+    const json = definition.answer.split('```')[1].slice(4);
+    assert.deepEqual(JSON.parse(json), catalogue('help')[0]);
+    const missing = await ask('do you have a missing_tool tool?', { name: 'missing_tool' });
+    assert.match(missing.answer, /don’t have a registered tool/);
+});
+
+test('a named search_help request invokes help directly', async () => {
+    const agent = new Agent({ complete: async () => assert.fail('A known help topic needs no model') }, executor);
+    const result = await agent.chat(
+        { message: 'Use search_help to find how to create a book in the web app.' },
+        session(), signal,
+    );
+    assert.match(result.answer, /Create a book in the web app/);
+    assert.equal(result.evidence[0].tool, 'search_help');
+});
 
 test('chat answers a known how-to with bundled instructions and a source', async () => {
     const agent = new Agent(

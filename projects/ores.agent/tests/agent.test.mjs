@@ -2,8 +2,35 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Agent } from '../dist/agent.js';
 import { readIntent, preserveReadSelectors } from '../dist/intent.js';
+import { ToolExecutor } from '../dist/tools.js';
+import { fixtureSession } from '../evals/fixtures.mjs';
 const makeSession = () => ({ active: true, expires: Date.now() + 100000, chatBusy: false });
 const toolCall = (args = '{}', name = 'list_currencies') => ({ role: 'assistant', content: null, tool_calls: [{ id: 'call1', type: 'function', function: { name, arguments: args } }] });
+test('currency questions filter the complete catalogue and use configured country links', async () => {
+    const currencies = [
+        ...Array.from({ length: 50 }, (_, index) => ({ iso_code: 'A' + index, name: 'Fixture currency' })),
+        { iso_code: 'CAD', name: 'Canadian Dollar' },
+        { iso_code: 'USD', name: 'US Dollar' },
+    ];
+    const tables = {
+        currencies,
+        countries: [{ alpha2_code: 'US', alpha3_code: 'USA', name: 'United States', official_name: 'United States of America' }],
+        currencyCountries: [{ country_alpha2_code: 'US', currency_iso_code: 'USD' }],
+    };
+    const backend = { request: async (operation, args) => {
+        const rows = tables[operation].filter(row => !args.filter || args.filter.iso_code_one_of.includes(row.iso_code));
+        const key = operation === 'currencyCountries' ? 'currency_countries' : operation;
+        return { result: { outcome: 'ok' }, total: rows.length, [key]: rows.slice(args.offset, args.offset + args.limit) };
+    } };
+    const agent = new Agent({ complete: async () => assert.fail('Explicit currency lookups require no model round trip') }, new ToolExecutor(backend, () => {}));
+    const signal = new AbortController().signal;
+    const prefix = await agent.chat({ message: 'currencies beginning with the letter C' }, fixtureSession(), signal);
+    assert.match(prefix.answer, /CAD/);
+    assert.equal(prefix.evidence[0].total, 1);
+    const country = await agent.chat({ message: 'the currency for the united states' }, fixtureSession(), signal);
+    assert.match(country.answer, /USD/);
+    assert.equal(country.evidence[0].country, 'United States');
+});
 test('agent directly executes tools and returns attributable evidence; no MCP loopback', async () => {
     let turns = 0, executed = 0;
     const inference = { complete: async messages => {
@@ -52,7 +79,7 @@ test('market facts are rendered from evidence; provider clarification stays in i
 });
 test('book clarification is bound to the requesting session and resumes the original trade search', async () => {
     let modelCalls = 0; const calls = [];
-    const agent = new Agent({ complete: async (_, catalog) => { modelCalls++; assert.ok(catalog.length <= 6); return { role: 'assistant', content: null, tool_calls: [{ id: 'b', type: 'function', function: { name: 'find_trades', arguments: '{"book":"Group"}' } }] }; } }, {
+    const agent = new Agent({ complete: async (_, catalog) => { modelCalls++; assert.ok(catalog.filter(t => t.function.name !== 'inspect_tools').length <= 6); return { role: 'assistant', content: null, tool_calls: [{ id: 'b', type: 'function', function: { name: 'find_trades', arguments: '{"book":"Group"}' } }] }; } }, {
         execute: async (name, args) => { calls.push(args); return args.book === 'id-fx' ? { tool: name, status: 'ok', rows: [], totalMatches: 0, catalogueScope: 'selected_party', offset: 0 } : { tool: name, status: 'ambiguous', request: args, field: 'book', reason: 'Choose a book.', candidates: [{ id: 'id-fx', name: 'Group FX' }, { id: 'id-loans', name: 'Group Loans' }] }; },
     });
     const s = makeSession(); await agent.chat({ message: 'Show trades in book Group' }, s, new AbortController().signal);
@@ -77,7 +104,7 @@ test('the model cannot opt into partial results when the user did not request th
 test('scope run selection is private to its session and resumes the literal historical scope', async () => {
     const runId = '22222222-2222-4222-8222-222222222222'; let modelCalls = 0; const calls = [];
     const agent = new Agent({ complete: async (messages, catalogue) => {
-        modelCalls++; assert.ok(catalogue.length <= 6);
+        modelCalls++; assert.ok(catalogue.filter(t => t.function.name !== 'inspect_tools').length <= 6);
         if (messages.at(-1).content === runId) return { role: 'assistant', content: 'No pending scope for this session.' };
         return toolCall(JSON.stringify({ scopeType: 'book', scope: 'FX Book', runId: messages.at(-1).content.includes(runId) ? runId : undefined }), 'summarize_scope_results');
     } }, { execute: async (name, args) => { calls.push(args); return { tool: name, request: args, status: args.runId ? 'unavailable' : 'selection_required', field: 'runId', reason: args.runId ? 'labelled fixture unavailable' : 'Choose a run.' }; } });

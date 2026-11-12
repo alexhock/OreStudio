@@ -14,6 +14,8 @@ export const subjects = {
     logout: 'iam.v1.ops.logout',
     selectParty: 'iam.v1.ops.select_party',
     currencies: 'refdata.v1.currencies.list',
+    countries: 'refdata.v1.countries.list',
+    currencyCountries: 'refdata.v1.currency_countries.list',
     series: 'marketdata.v1.market_series.list',
     observations: 'marketdata.v1.market_observations.list_by_series_id',
     trades: 'trading.v1.trades.list',

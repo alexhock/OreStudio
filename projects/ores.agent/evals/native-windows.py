@@ -134,7 +134,8 @@ def main():
         with log.open("wb") as stream:
             child = subprocess.Popen(argv, cwd=cwd, env=process_env, stdout=stream,
                                      stderr=subprocess.STDOUT,
-                                     creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+                                     creationflags=(subprocess.CREATE_NEW_PROCESS_GROUP |
+                                                    subprocess.CREATE_NO_WINDOW))
         try:
             job.add(child)
         except OSError:

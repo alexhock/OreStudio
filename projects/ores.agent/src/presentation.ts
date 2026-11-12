@@ -9,6 +9,7 @@ import type { PendingChoice } from './conversation.js';
 import { analyticsTools, formatAnalytics } from './fx-analytics.js';
 import { formatMarketCurve } from './fx-market-curve.js';
 import { marketCurveInput } from './fx-market-request.js';
+import { formatCurrencies } from './currency-reference.js';
 
 const metadata = z.object({
     tool: z.string(),
@@ -52,7 +53,8 @@ export function present(raw: unknown): Presentation {
                 },
             };
         }
-    } else if (Object.hasOwn(analyticsTools, result.tool)) answer = formatAnalytics(raw);
+    } else if (result.tool === 'list_currencies') answer = formatCurrencies(raw);
+    else if (Object.hasOwn(analyticsTools, result.tool)) answer = formatAnalytics(raw);
     else if (result.tool === 'summarize_scope_results') answer = formatScopeReporting(raw);
     else if (Object.hasOwn(reportingTools, result.tool)) answer = formatReporting(raw);
     else if (Object.hasOwn(discoveryTools, result.tool)) answer = formatDiscovery(raw);

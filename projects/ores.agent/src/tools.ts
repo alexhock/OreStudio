@@ -9,6 +9,7 @@ import { ScopeReporting, scopeTools } from './scope-reporting.js';
 import { FxAnalytics, analyticsTools } from './fx-analytics.js';
 import { FxMarketCurve, marketCurveTools } from './fx-market-curve.js';
 import { helpTool, searchHelp } from './help.js';
+import { currencyInput, readCurrencies } from './currency-reference.js';
 
 const page = { offset: 0, order: { field: '', descending: false }, filter: null, as_of: null };
 const limit = z.number().int().min(1).max(50).default(10);
@@ -31,8 +32,8 @@ export const tools = {
     },
     list_currencies: {
         description:
-            'Read configured currency codes and names from OreStudio. Results may be paginated.',
-        schema: z.object({ limit, offset: z.number().int().min(0).max(10000).default(0) }).strict(),
+            'Read configured currency codes and names from OreStudio, optionally filtered by an ISO code prefix or an exact country name or code. Results may be paginated.',
+        schema: currencyInput,
     },
     list_market_series: {
         description:
@@ -51,11 +52,6 @@ export const tools = {
         schema: z.object({ seriesId: marketId, limit }).strict(),
     },
 } as const;
-const currencies = z.object({
-    iso_code: z.string(),
-    name: z.string(),
-    symbol: z.string().optional(),
-});
 const series = z.object({
     id: marketId,
     oresmd_uri: z.string(),
@@ -122,6 +118,18 @@ export class ToolExecutor {
                 outcome = 'ok';
                 return searchHelp(query);
             }
+            if (name === 'list_currencies') {
+                const output = await readCurrencies(
+                    this.backend,
+                    input as z.infer<typeof currencyInput>,
+                    session,
+                    signal,
+                );
+                if (Buffer.byteLength(JSON.stringify(output)) > 32768)
+                    throw new AppError('oversized_result', 'Tool output exceeds its limit.');
+                outcome = 'ok';
+                return output;
+            }
             if (Object.hasOwn(marketCurveTools, name)) {
                 const output = await this.marketCurve.execute(input, session, signal);
                 if (Buffer.byteLength(JSON.stringify(output)) > 32768)
@@ -175,14 +183,7 @@ export class ToolExecutor {
                 return output;
             }
             let raw: unknown;
-            if (name === 'list_currencies')
-                raw = await this.backend.request(
-                    'currencies',
-                    { ...page, ...input },
-                    session,
-                    signal,
-                );
-            else if (name === 'list_market_series') {
+            if (name === 'list_market_series') {
                 const { query: _, ...paging } = input as z.infer<
                     typeof tools.list_market_series.schema
                 >;
@@ -215,9 +216,7 @@ export class ToolExecutor {
                     403,
                 );
             let rows: unknown[];
-            if (name === 'list_currencies')
-                rows = z.object({ currencies: z.array(currencies).max(50) }).parse(raw).currencies;
-            else if (name === 'list_market_series') {
+            if (name === 'list_market_series') {
                 rows = z
                     .object({ market_series: z.array(marketSeries).max(50) })
                     .parse(raw)

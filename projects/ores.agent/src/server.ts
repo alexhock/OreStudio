@@ -8,7 +8,7 @@ import { ToolExecutor, tools } from './tools.js';
 import { z } from 'zod';
 import { createMcp } from './mcp.js';
 import { Agent } from './agent.js';
-import { HttpInference } from './inference.js';
+import { HttpInference, withInferenceReasoning } from './inference.js';
 import { serveUi } from './ui.js';
 import { renderMarkdown } from './markdown.js';
 import { version } from './version.js';
@@ -25,6 +25,20 @@ export function json(res: ServerResponse, status: number, body: unknown): void {
         'x-content-type-options': 'nosniff',
     });
     res.end(JSON.stringify(body));
+}
+
+const chatStreamType = 'application/x-ndjson';
+function chatEvent(res: ServerResponse, event: object, final = false) {
+    if (res.destroyed || res.writableEnded) return;
+    if (!res.headersSent)
+        res.writeHead(200, {
+            'content-type': chatStreamType,
+            'cache-control': 'no-store',
+            'x-content-type-options': 'nosniff',
+        });
+    const line = JSON.stringify(event) + '\n';
+    if (final) res.end(line);
+    else res.write(line);
 }
 
 export async function body(req: IncomingMessage): Promise<unknown> {
@@ -113,8 +127,22 @@ export function createApp(config: Config, backend?: Backend, submissionDirectory
                 res.on('close', () => {
                     if (!res.writableFinished) abort.abort();
                 });
-                const result = await agent.chat(await body(req), session, abort.signal, requestId);
-                return json(res, 200, { ...result, answerHtml: renderMarkdown(result.answer) });
+                const input = await body(req);
+                const run = () => agent.chat(input, session, abort.signal, requestId);
+                const stream = req.headers.accept
+                    ?.split(',')
+                    .some((type) => type.trim() === chatStreamType);
+                let remaining = 16000;
+                const result = stream
+                    ? await withInferenceReasoning((text) => {
+                          const chunk = text.slice(0, remaining);
+                          remaining -= chunk.length;
+                          if (chunk) chatEvent(res, { type: 'reasoning', text: chunk });
+                      }, run)
+                    : await run();
+                const response = { ...result, answerHtml: renderMarkdown(result.answer) };
+                if (stream) return chatEvent(res, { type: 'result', result: response }, true);
+                return json(res, 200, response);
             }
             if (req.method === 'GET' && req.url === '/tools')
                 return json(
@@ -155,7 +183,15 @@ export function createApp(config: Config, backend?: Backend, submissionDirectory
                             400,
                         )
                       : new AppError('internal_error', 'Request failed.', 500);
-            json(res, safe.status, { error: safe.message, code: safe.code });
+            if (res.headersSent) {
+                if (res.getHeader('content-type') === chatStreamType)
+                    chatEvent(
+                        res,
+                        { type: 'error', error: safe.message, status: safe.status },
+                        true,
+                    );
+                else res.end();
+            } else json(res, safe.status, { error: safe.message, code: safe.code });
         });
     });
     server.requestTimeout = 65000;

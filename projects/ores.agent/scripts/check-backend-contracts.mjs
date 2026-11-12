@@ -68,6 +68,8 @@ function sourceHashes(ops) {
         }
     }
     for (const op of Object.values(ops)) visit(op.path);
+    for (const entity of ['country', 'currency_country'])
+        visit(join(root, `projects/ores.refdata/api/include/ores.refdata.api/domain/${entity}_codec.hpp`));
     if (ops.runDocument)
         visit(join(root, 'projects/ores.reporting/api/src/messaging/run_document_protocol_codec.cpp'));
     for (const path of [
@@ -203,6 +205,18 @@ async function verify(probePath) {
         // Responses use server-defined defaults here; replay below checks meaningful rows.
         roundtrip(op, encode(payload), {});
     }
+    const country = decode(roundtrip('countries', encode(page), {
+        result: { outcome: 'ok' }, total: 1,
+        countries: [{ alpha2_code: 'US', alpha3_code: 'USA', name: 'United States', official_name: 'United States of America' }],
+    }));
+    assert.equal(country.countries[0].alpha3_code, 'USA');
+    const { as_of: _, ...linkPage } = page;
+    const links = decode(roundtrip('currencyCountries', encode(linkPage), {
+        result: { outcome: 'ok' }, total: 1,
+        currency_countries: [{ country_alpha2_code: 'US', currency_iso_code: 'USD' }],
+    }));
+    assert.equal(links.currency_countries[0].currency_iso_code, 'USD');
+    roundtrip('currencies', encode({ ...page, filter: { iso_code_one_of: ['USD'] } }), {});
     const bookingSession = fixtureSession();
     for (const [booking, terms] of [[bookingBackend(), fxTerms], [swapBackend(), swapTerms.parse(swapBookingTerms)]]) {
         const bookingAdapter = new NatsBackend({

@@ -90,10 +90,18 @@ export const helpTool = {
     schema: z.object({ query: z.string().trim().min(1).max(16000) }).strict(),
 };
 
-export function isHelpRequest(message: string) {
-    return /^(?:please\s+)?(?:how\s+(?:(?:do|can|could|should|would)\s+(?:i|we)\b|to\b)|(?:show|tell|teach)\s+me\s+how\b|where\s+(?:do|can|should)\s+(?:i|we)\b|(?:find|search)\s+(?:(?:the|for)\s+)?(?:orestudio\s+)?(?:help|docs|documentation)\b|(?:help|docs|documentation|how-to)\b)/i.test(
-        message.trim(),
-    );
+export function helpQuery(message: string) {
+    const explicit =
+        /^(?:(?:please\s+)?(?:use|call|invoke)\s+)?`?search_help`?(?::\s*|\s+(?:for\s+|to\s+(?:find|look up|search for)\s+))(.+)$/i.exec(
+            message,
+        );
+    if (explicit) return explicit[1]!.trim();
+    if (
+        /^(?:please\s+)?(?:how\s+(?:(?:do|can|could|should|would)\s+(?:i|we)\b|to\b)|(?:show|tell|teach)\s+me\s+how\b|where\s+(?:do|can|should)\s+(?:i|we)\b|(?:find|search)\s+(?:(?:the|for)\s+)?(?:orestudio\s+)?(?:help|docs|documentation)\b|(?:help|docs|documentation|how-to)\b)/i.test(
+            message,
+        )
+    )
+        return message;
 }
 
 export function searchHelp(query: string) {

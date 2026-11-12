@@ -75,6 +75,7 @@ input, textarea { width: 100%; background: var(--panel); color: inherit; }
 details { margin-top: 10px; color: var(--muted); font-size: .875rem; }
 summary { cursor: pointer; width: fit-content; max-width: 100%; }
 pre { overflow: auto; background: var(--panel); padding: 14px; border-radius: 8px; }
+.reasoning pre { max-height: 18rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 .compose { padding-block: 8px 12px; }
 #chat {
     display: flex; align-items: flex-end; gap: 10px; padding: 8px;
@@ -144,7 +145,7 @@ pre { overflow: auto; background: var(--panel); padding: 14px; border-radius: 8p
         <p id="chat-status" class="error" role="status"></p>
         <form id="chat">
             <textarea id="message" aria-label="Message OreStudio" aria-describedby="composer-hint" maxlength="16000" rows="2" placeholder="Message OreStudio…" required></textarea>
-            <button id="send" disabled>Send</button>
+            <button id="send" type="submit">Send</button>
             <button id="stop" class="secondary" type="button" hidden>Stop</button>
         </form>
         <small id="composer-hint">Enter to send · Shift+Enter for a new line</small>
@@ -162,13 +163,19 @@ let resetting = false;
 let signingOut = false;
 const reportWatches = new Map();
 
-async function api(path, data, signal) {
+async function api(path, data, signal, onReasoning) {
     const response = await fetch(path, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+        headers: {
+            'Content-Type': 'application/json',
+            ...(onReasoning ? { Accept: 'application/x-ndjson' } : {}),
+            ...(token ? { Authorization: 'Bearer ' + token } : {}),
+        },
         body: JSON.stringify(data),
         signal,
     });
+    if (onReasoning && response.headers.get('content-type')?.includes('application/x-ndjson'))
+        return readChatStream(response, onReasoning);
     const result = await response.json();
     if (!response.ok) {
         throw Object.assign(new Error(result.error || 'Request failed.'), { status: response.status });
@@ -176,8 +183,33 @@ async function api(path, data, signal) {
     return result;
 }
 
+async function readChatStream(response, onReasoning) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let pending = '';
+    try {
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) throw new Error('The chat connection ended before a reply arrived.');
+            const lines = (pending + decoder.decode(value, { stream: true })).split('\\n');
+            pending = lines.pop();
+            for (const line of lines) {
+                if (!line) continue;
+                const event = JSON.parse(line);
+                if (event.type === 'reasoning') onReasoning(event.text);
+                else if (event.type === 'result') return event.result;
+                else if (event.type === 'error')
+                    throw Object.assign(new Error(event.error), { status: event.status });
+            }
+        }
+    } finally {
+        await reader.cancel().catch(() => {});
+        reader.releaseLock();
+    }
+}
+
 function syncControls() {
-    el('send').disabled = Boolean(request || resetting || signingOut || !composer.value.trim());
+    el('send').disabled = Boolean(request || resetting || signingOut);
     el('send').hidden = Boolean(request);
     el('stop').hidden = !request;
     el('stop').disabled = Boolean(request?.signal.aborted || signingOut);
@@ -406,11 +438,10 @@ el('reset').onclick = async () => {
     }
 };
 
-composer.oninput = syncControls;
 composer.onkeydown = event => {
     if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
     event.preventDefault();
-    if (!el('send').disabled) el('chat').requestSubmit();
+    el('chat').requestSubmit();
 };
 
 el('chat').onsubmit = event => {
@@ -434,8 +465,30 @@ async function sendChat(payload, label) {
     composer.focus();
     scrollToLatest();
 
+    let reasoningText;
+    const showReasoning = text => {
+        if (token !== sessionToken || signingOut || controller.signal.aborted) return;
+        const following = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 48;
+        if (!reasoningText) {
+            const panel = document.createElement('details');
+            panel.className = 'reasoning';
+            panel.open = true;
+            const label = document.createElement('summary');
+            label.textContent = 'Model reasoning';
+            const body = document.createElement('pre');
+            reasoningText = document.createTextNode('');
+            body.append(reasoningText);
+            panel.append(label, body);
+            content.before(panel);
+        }
+        const body = reasoningText.parentElement;
+        const atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 24;
+        reasoningText.appendData(text);
+        if (atBottom) body.scrollTop = body.scrollHeight;
+        if (following) scrollToLatest();
+    };
     try {
-        const result = await api('/chat', payload, controller.signal);
+        const result = await api('/chat', payload, controller.signal, showReasoning);
         if (token !== sessionToken || signingOut) return;
         const following = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 48;
         if (typeof result.answerHtml === 'string') content.innerHTML = result.answerHtml;
